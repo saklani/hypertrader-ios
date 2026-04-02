@@ -1,0 +1,72 @@
+import SwiftUI
+
+struct PositionsView: View {
+    @State private var vm = PositionsViewModel()
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Account summary
+                Section("Account") {
+                    HStack {
+                        Text("Account Value")
+                        Spacer()
+                        Text(vm.accountValue)
+                            .font(.body.monospaced())
+                    }
+                    HStack {
+                        Text("Margin Used")
+                        Spacer()
+                        Text(vm.totalMarginUsed)
+                            .font(.body.monospaced())
+                    }
+                }
+
+                // Positions
+                Section("Open Positions") {
+                    if vm.positions.isEmpty && !vm.isLoading {
+                        Text("No open positions")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(vm.positions) { assetPosition in
+                        PositionRowView(
+                            position: assetPosition,
+                            midPrice: vm.midPrices[assetPosition.position.coin],
+                            isClosing: vm.closingCoin == assetPosition.position.coin
+                        ) {
+                            Task { await vm.closePosition(assetPosition) }
+                        }
+                    }
+                }
+
+                if let error = vm.error {
+                    Section {
+                        Label(error, systemImage: "xmark.circle")
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Positions")
+            .task {
+                await vm.loadPositions()
+                vm.startAutoRefresh()
+            }
+            .onDisappear {
+                vm.stopAutoRefresh()
+            }
+            .refreshable {
+                await vm.loadPositions()
+            }
+            .overlay {
+                if vm.isLoading && vm.positions.isEmpty {
+                    ProgressView("Loading positions...")
+                }
+            }
+        }
+    }
+}
+
+#Preview {
+    PositionsView()
+}

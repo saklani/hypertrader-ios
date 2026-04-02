@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		E4CF8AD02F7BE61000CAD2ED /* libsecp256k1 in Frameworks */ = {isa = PBXBuildFile; productRef = E4CF8ACF2F7BE61000CAD2ED /* libsecp256k1 */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		E4327E6B2F7A634A00DBE775 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E4CF8AD02F7BE61000CAD2ED /* libsecp256k1 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +83,7 @@
 				E4327E5D2F7A634900DBE775 /* hypertrader */,
 				E4327E6D2F7A634A00DBE775 /* hypertraderTests */,
 				E4327E772F7A634A00DBE775 /* hypertraderUITests */,
+				E4CF8A952F7BE59700CAD2ED /* Frameworks */,
 				E4327E5C2F7A634900DBE775 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -90,6 +96,13 @@
 				E4327E742F7A634A00DBE775 /* hypertraderUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		E4CF8A952F7BE59700CAD2ED /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -112,6 +125,7 @@
 			);
 			name = hypertrader;
 			packageProductDependencies = (
+				E4CF8ACF2F7BE61000CAD2ED /* libsecp256k1 */,
 			);
 			productName = hypertrader;
 			productReference = E4327E5B2F7A634900DBE775 /* hypertrader.app */;
@@ -195,6 +209,9 @@
 			);
 			mainGroup = E4327E522F7A634900DBE775;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E4CF8ACE2F7BE61000CAD2ED /* XCRemoteSwiftPackageReference "secp256k1" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E4327E5C2F7A634900DBE775 /* Products */;
 			projectDirPath = "";
@@ -400,11 +417,14 @@
 				DEVELOPMENT_TEAM = XMGS4YUWNJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Hypertrader;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIStatusBarHidden = NO;
+				INFOPLIST_KEY_UIStatusBarStyle = "";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -413,6 +433,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = s67131998.hypertrader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -432,11 +456,14 @@
 				DEVELOPMENT_TEAM = XMGS4YUWNJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Hypertrader;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UIStatusBarHidden = NO;
+				INFOPLIST_KEY_UIStatusBarStyle = "";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -445,6 +472,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = s67131998.hypertrader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -578,6 +609,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E4CF8ACE2F7BE61000CAD2ED /* XCRemoteSwiftPackageReference "secp256k1" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/GigaBitcoin/secp256k1.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.23.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E4CF8ACF2F7BE61000CAD2ED /* libsecp256k1 */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E4CF8ACE2F7BE61000CAD2ED /* XCRemoteSwiftPackageReference "secp256k1" */;
+			productName = libsecp256k1;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E4327E532F7A634900DBE775 /* Project object */;
 }
