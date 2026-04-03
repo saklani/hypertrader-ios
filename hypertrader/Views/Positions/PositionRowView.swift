@@ -14,17 +14,10 @@ struct PositionRowView: View {
             HStack {
                 Text(pos.coin)
                     .font(.headline)
-                Text(pos.isLong ? "LONG" : "SHORT")
-                    .font(.caption.bold())
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(pos.isLong ? Color.green.opacity(0.2) : Color.red.opacity(0.2))
-                    .foregroundStyle(pos.isLong ? .green : .red)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                StatusChip(pos.isLong ? "LONG" : "SHORT", color: pos.isLong ? .green : .red)
 
                 Spacer()
 
-                // Leverage
                 Text("\(pos.leverage.value)x")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -32,53 +25,18 @@ struct PositionRowView: View {
 
             // Details grid
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Size")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(String(format: "%.4f", pos.absSize))
-                        .font(.caption.monospaced())
-                }
-
+                DetailColumn(label: "Size", value: String(format: "%.4f", pos.absSize), alignment: .leading)
                 Spacer()
-
-                VStack(alignment: .center, spacing: 2) {
-                    Text("Entry")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(pos.entryPx ?? "--")
-                        .font(.caption.monospaced())
-                }
-
+                DetailColumn(label: "Entry", value: pos.entryPx ?? "--", alignment: .center)
                 Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("uPnL")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    Text(pnlFormatted)
-                        .font(.caption.monospaced().bold())
-                        .foregroundStyle(pos.pnl >= 0 ? .green : .red)
-                }
+                DetailColumn(label: "uPnL", value: pnlFormatted, alignment: .trailing, valueColor: pos.pnl >= 0 ? .green : .red)
             }
 
             // Close button
-            Button(role: .destructive) {
+            Button("Close Position") {
                 onClose()
-            } label: {
-                HStack {
-                    Spacer()
-                    if isClosing {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Text("Close Position")
-                        .font(.subheadline.bold())
-                    Spacer()
-                }
-                .padding(.vertical, 6)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(DestructiveActionButtonStyle(isLoading: isClosing))
             .disabled(isClosing)
         }
         .padding(.vertical, 4)
@@ -105,7 +63,9 @@ struct PositionRowView: View {
                     returnOnEquity: "0.03",
                     liquidationPx: "2800.00",
                     marginUsed: "480.00",
-                    leverage: HLLeverage(type: "cross", value: 10)
+                    leverage: HLLeverage(type: "cross", value: 10, rawUsd: nil),
+                    maxLeverage: nil,
+                    cumFunding: nil
                 )
             ),
             midPrice: "3300.00",
@@ -129,7 +89,9 @@ struct PositionRowView: View {
                     returnOnEquity: "-0.05",
                     liquidationPx: "99000.00",
                     marginUsed: "940.00",
-                    leverage: HLLeverage(type: "cross", value: 5)
+                    leverage: HLLeverage(type: "cross", value: 5, rawUsd: nil),
+                    maxLeverage: nil,
+                    cumFunding: nil
                 )
             ),
             midPrice: "94600.00",

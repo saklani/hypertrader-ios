@@ -8,18 +8,8 @@ struct PositionsView: View {
             List {
                 // Account summary
                 Section("Account") {
-                    HStack {
-                        Text("Account Value")
-                        Spacer()
-                        Text(vm.accountValue)
-                            .font(.body.monospaced())
-                    }
-                    HStack {
-                        Text("Margin Used")
-                        Spacer()
-                        Text(vm.totalMarginUsed)
-                            .font(.body.monospaced())
-                    }
+                    MetricRow(label: "Account Value", value: vm.accountValue)
+                    MetricRow(label: "Margin Used", value: vm.totalMarginUsed)
                 }
 
                 // Positions
@@ -42,8 +32,7 @@ struct PositionsView: View {
 
                 if let error = vm.error {
                     Section {
-                        Label(error, systemImage: "xmark.circle")
-                            .foregroundStyle(.red)
+                        StatusMessage(error, isError: true)
                     }
                 }
             }

@@ -3,19 +3,24 @@ import SwiftUI
 struct MainTabView: View {
     var body: some View {
         TabView {
-            MarketsView()
+            MarketView()
                 .tabItem {
                     Label("Markets", systemImage: "chart.bar.fill")
-                }
-
-            TradingView()
-                .tabItem {
-                    Label("Trade", systemImage: "chart.line.uptrend.xyaxis")
                 }
 
             PositionsView()
                 .tabItem {
                     Label("Positions", systemImage: "list.bullet.rectangle")
+                }
+
+            PortfolioView()
+                .tabItem {
+                    Label("Portfolio", systemImage: "briefcase")
+                }
+
+            SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
                 }
         }
         .task {

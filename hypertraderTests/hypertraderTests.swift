@@ -108,7 +108,7 @@ struct MsgPackTests {
             a: 0, b: true, p: "95000", s: "0.01", r: false,
             t: HLOrderTypeWire(limit: HLLimitWire(tif: "Gtc")), c: nil
         )
-        let action = HLOrderAction(orders: [order], grouping: "na")
+        let action = HLOrderAction(orders: [order], grouping: "na", builder: nil)
         let data = try MsgPackEncoder().encode(action)
         #expect(data.count > 0)
         // Re-encode should be identical

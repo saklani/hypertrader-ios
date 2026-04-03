@@ -79,7 +79,7 @@ final class HyperliquidExchangeService {
         let slippagePrice = currentMidPrice * slippageMultiplier
 
         let input = OrderInput(
-            asset: HLAsset(name: position.coin, szDecimals: 4),
+            asset: HLAsset(name: position.coin, szDecimals: 4, maxLeverage: 50, onlyIsolated: nil, isDelisted: nil),
             assetIndex: assetIndex,
             isBuy: !isClosingLong,
             size: formatPrice(String(size)),
@@ -102,6 +102,7 @@ final class HyperliquidExchangeService {
         let action: [String: Any] = [
             "type": "approveAgent",
             "hyperliquidChain": "Testnet",
+            "signatureChainId": "0x66eee",
             "agentAddress": agentAddress,
             "agentName": "hypertrader",
             "nonce": nonce

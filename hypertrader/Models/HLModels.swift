@@ -9,6 +9,9 @@ struct HLAssetMeta: Codable {
 struct HLAsset: Codable, Identifiable, Hashable {
     let name: String
     let szDecimals: Int
+    let maxLeverage: Int
+    let onlyIsolated: Bool?
+    let isDelisted: Bool?
     var id: String { name }
 }
 
@@ -17,6 +20,7 @@ struct HLAsset: Codable, Identifiable, Hashable {
 struct HLClearinghouseState: Codable {
     let marginSummary: HLMarginSummary
     let crossMarginSummary: HLMarginSummary
+    let crossMaintenanceMarginUsed: String?
     let withdrawable: String
     let assetPositions: [HLAssetPosition]
 }
@@ -44,6 +48,8 @@ struct HLPosition: Codable {
     let liquidationPx: String?
     let marginUsed: String
     let leverage: HLLeverage
+    let maxLeverage: Int?
+    let cumFunding: HLCumFunding?
 
     var isLong: Bool { (Double(szi) ?? 0) > 0 }
     var absSize: Double { abs(Double(szi) ?? 0) }
@@ -53,6 +59,13 @@ struct HLPosition: Codable {
 struct HLLeverage: Codable {
     let type: String
     let value: Int
+    let rawUsd: String?
+}
+
+struct HLCumFunding: Codable {
+    let allTime: String
+    let sinceChange: String
+    let sinceOpen: String
 }
 
 // MARK: - Asset Context (volume, mark price, etc.)
@@ -62,6 +75,11 @@ struct HLAssetCtx: Codable {
     let markPx: String
     let midPx: String?
     let prevDayPx: String
+    let funding: String?
+    let openInterest: String?
+    let oraclePx: String?
+    let premium: String?
+    let impactPxs: [String]?
 }
 
 /// Response from `metaAndAssetCtxs` — a heterogeneous JSON array: [HLAssetMeta, [HLAssetCtx]]
@@ -97,13 +115,13 @@ enum MarketFilter: String, CaseIterable {
 
 /// Unified market item combining perps and spot data for the Markets tab.
 struct MarketItem: Identifiable, Hashable {
-    let name: String          // display name (e.g. "BTC", "TSLA", "PURR/USDC")
-    let rawName: String       // API name (e.g. "xyz:TSLA")
+    let name: String
+    let rawName: String
     let dayNtlVlm: Double
     let prevDayPx: Double
     let isSpot: Bool
-    let isBuilderPerp: Bool   // has ":" in rawName = HIP-3
-    let category: String?     // from perpCategories: "stocks", "crypto", etc.
+    let isBuilderPerp: Bool
+    let category: String?
     var id: String { rawName }
 }
 
@@ -129,6 +147,11 @@ struct HLSpotMeta: Codable {
 struct HLSpotToken: Codable {
     let name: String
     let index: Int
+    let szDecimals: Int?
+    let weiDecimals: Int?
+    let tokenId: String?
+    let isCanonical: Bool?
+    let fullName: String?
 }
 
 struct HLSpotPair: Codable {
@@ -143,6 +166,112 @@ struct HLSpotAssetCtx: Codable {
     let markPx: String
     let midPx: String?
     let prevDayPx: String
+}
+
+// MARK: - Perp Dex (from perpDexs endpoint)
+
+/// A builder dex from the `perpDexs` endpoint. Element 0 is null (native dex).
+struct HLPerpDex: Codable {
+    let name: String
+    let fullName: String?
+    let deployer: String?
+}
+
+// MARK: - Candle (OHLCV)
+
+/// OHLCV candle. Handles both string (REST) and number (WebSocket) formats for price fields.
+struct HLCandle: Identifiable, Sendable {
+    let t: UInt64   // open time (ms)
+    let T: UInt64   // close time (ms)
+    let s: String   // coin symbol
+    let i: String   // interval
+    let open: Double
+    let close: Double
+    let high: Double
+    let low: Double
+    let volume: Double
+    let n: Int      // number of trades
+
+    var id: UInt64 { t }
+    var time: Date { Date(timeIntervalSince1970: Double(t) / 1000) }
+    var isBullish: Bool { close >= open }
+}
+
+extension HLCandle: Codable {
+    enum CodingKeys: String, CodingKey {
+        case t, T, s, i, o, c, h, l, v, n
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        t = try container.decode(UInt64.self, forKey: .t)
+        T = try container.decode(UInt64.self, forKey: .T)
+        s = try container.decode(String.self, forKey: .s)
+        i = try container.decode(String.self, forKey: .i)
+        n = try container.decode(Int.self, forKey: .n)
+
+        open = try Self.decodeFlexible(container: container, key: .o)
+        close = try Self.decodeFlexible(container: container, key: .c)
+        high = try Self.decodeFlexible(container: container, key: .h)
+        low = try Self.decodeFlexible(container: container, key: .l)
+        volume = try Self.decodeFlexible(container: container, key: .v)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(t, forKey: .t)
+        try container.encode(T, forKey: .T)
+        try container.encode(s, forKey: .s)
+        try container.encode(i, forKey: .i)
+        try container.encode(open, forKey: .o)
+        try container.encode(close, forKey: .c)
+        try container.encode(high, forKey: .h)
+        try container.encode(low, forKey: .l)
+        try container.encode(volume, forKey: .v)
+        try container.encode(n, forKey: .n)
+    }
+
+    private static func decodeFlexible(container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Double {
+        if let d = try? container.decode(Double.self, forKey: key) { return d }
+        let s = try container.decode(String.self, forKey: key)
+        guard let d = Double(s) else {
+            throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Cannot parse '\(s)' as Double")
+        }
+        return d
+    }
+}
+
+// MARK: - Trade Fills (history)
+
+struct HLFill: Codable, Identifiable {
+    let coin: String
+    let side: String        // "B" (buy) or "A" (sell/ask)
+    let px: String
+    let sz: String
+    let time: UInt64
+    let fee: String
+    let oid: Int
+    let tid: Int?           // unique trade id
+    let closedPnl: String?  // realized PnL from this fill
+    let hash: String?       // L1 transaction hash
+    let crossed: Bool?      // true = taker, false = maker
+    let dir: String?        // direction description for display
+    let startPosition: String?
+    let feeToken: String?
+    let builderFee: String?
+
+    var id: String {
+        if let tid { return "\(tid)" }
+        return "\(oid)-\(time)"
+    }
+    var isBuy: Bool { side == "B" }
+    var price: Double { Double(px) ?? 0 }
+    var size: Double { Double(sz) ?? 0 }
+    var date: Date { Date(timeIntervalSince1970: Double(time) / 1000) }
+    var realizedPnl: Double? {
+        guard let pnl = closedPnl else { return nil }
+        return Double(pnl)
+    }
 }
 
 // MARK: - Order Wire Format (for MessagePack encoding)
@@ -289,10 +418,8 @@ struct OrderInput {
 
 // MARK: - Helpers
 
-/// Remove trailing zeros from a decimal string (Hyperliquid requirement)
 func formatPrice(_ value: String) -> String {
     guard let decimal = Decimal(string: value) else { return value }
     let formatted = NSDecimalNumber(decimal: decimal).stringValue
     return formatted
 }
-

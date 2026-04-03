@@ -650,7 +650,7 @@ enum WalletApp: String, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .rainbow: return "rainbow"
-        case .metamask: return "fox.fill"
+        case .metamask: return "m.circle.fill"
         case .coinbase: return "c.circle.fill"
         }
     }

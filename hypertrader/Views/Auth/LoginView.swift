@@ -42,9 +42,6 @@ struct LoginView: View {
 
     private var walletPicker: some View {
         VStack(spacing: 12) {
-            Text("Connect Wallet")
-                .font(.headline)
-
             ForEach(WalletApp.allCases) { wallet in
                 walletButton(wallet)
             }
@@ -84,11 +81,8 @@ struct LoginView: View {
                 Image(systemName: "chevron.right")
                     .foregroundStyle(.secondary)
             }
-            .font(.body)
-            .padding()
-            .background(.quaternary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
+        .buttonStyle(WalletRowButtonStyle())
         .disabled(authVM.wcManager.isLoading)
     }
 
@@ -96,35 +90,25 @@ struct LoginView: View {
 
     private var copyURISheet: some View {
         VStack(spacing: 20) {
-            Text("WalletConnect URI")
-                .font(.headline)
-                .padding(.top)
+            SheetHeader(title: "WalletConnect URI")
 
             if let uri = authVM.pendingURI {
                 Text(uri)
                     .font(.caption2.monospaced())
                     .lineLimit(4)
-                    .padding()
-                    .background(.quaternary)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .surfaceCard()
 
                 Button {
                     UIPasteboard.general.string = uri
                     copiedURI = true
-                    // Start waiting for the wallet to connect
                     Task { await authVM.waitForSession() }
                 } label: {
                     HStack {
                         Image(systemName: copiedURI ? "checkmark" : "doc.on.doc")
                         Text(copiedURI ? "Copied" : "Copy to Clipboard")
                     }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(copiedURI ? .green : .blue)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                .buttonStyle(PrimaryButtonStyle(color: copiedURI ? .green : .blue))
 
                 Text("Paste this URI into your wallet app\nto connect.")
                     .font(.caption)
@@ -161,20 +145,9 @@ struct LoginView: View {
                 Button {
                     Task { await authVM.setupAgentWallet() }
                 } label: {
-                    HStack {
-                        if authVM.isSettingUpAgent {
-                            ProgressView()
-                                .tint(.white)
-                        }
-                        Text("Approve Trading")
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.orange)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    Text("Approve Trading")
                 }
+                .buttonStyle(PrimaryButtonStyle(color: .orange, isLoading: authVM.isSettingUpAgent))
                 .disabled(authVM.isSettingUpAgent)
                 .padding(.horizontal)
 

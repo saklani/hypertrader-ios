@@ -37,6 +37,11 @@ final class HyperliquidInfoService {
         try await post(body: ["type": "openOrders", "user": address])
     }
 
+    /// Get recent trade fills for a wallet address
+    func getUserFills(address: String) async throws -> [HLFill] {
+        try await post(body: ["type": "userFills", "user": address])
+    }
+
     /// Get asset metadata + context (24h volume, mark price, etc.) for all perps
     func getMetaAndAssetCtxs() async throws -> HLMetaAndAssetCtxs {
         try await post(body: ["type": "metaAndAssetCtxs"])
@@ -52,8 +57,18 @@ final class HyperliquidInfoService {
         try await post(body: ["type": "spotMetaAndAssetCtxs"])
     }
 
-    /// Get all builder dex names: [null, "xyz", "flx", ...]
-    func getPerpDexs() async throws -> [String?] {
+    /// Get historical candle data for a coin
+    func getCandleSnapshot(coin: String, interval: String, startTime: UInt64, endTime: UInt64) async throws -> [HLCandle] {
+        let reqBody: [String: Any] = [
+            "type": "candleSnapshot",
+            "req": ["coin": coin, "interval": interval, "startTime": startTime, "endTime": endTime] as [String: Any]
+        ]
+        print("[API] candleSnapshot request: \(reqBody)")
+        return try await postAny(body: reqBody)
+    }
+
+    /// Get all builder dexes: [null, {name: "xyz", ...}, ...]
+    func getPerpDexs() async throws -> [HLPerpDex?] {
         try await post(body: ["type": "perpDexs"])
     }
 

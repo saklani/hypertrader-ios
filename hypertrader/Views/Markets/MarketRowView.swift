@@ -20,12 +20,7 @@ struct MarketRowView: View {
             Spacer()
 
             Text(formattedChange)
-                .font(.caption.bold().monospaced())
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(changeColor.opacity(0.15))
-                .foregroundStyle(changeColor)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .badgeStyle(color: changeColor)
                 .frame(width: 80)
 
             Text(formattedVolume)
