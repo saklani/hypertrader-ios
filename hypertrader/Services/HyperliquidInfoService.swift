@@ -7,7 +7,7 @@ final class HyperliquidInfoService {
     private let baseURL: URL
     private let session: URLSession
 
-    init(isTestnet: Bool = true) {
+    init(isTestnet: Bool = false) {
         let urlString = isTestnet
             ? "https://api.hyperliquid-testnet.xyz"
             : "https://api.hyperliquid.xyz"

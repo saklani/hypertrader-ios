@@ -45,18 +45,18 @@ struct MarketPicker: View {
     private var pickerSheet: some View {
         NavigationStack {
             List(filteredAssets) { item in
-                Button {
+                MarketRowView(
+                    coin: item.asset.name,
+                    price: Double(midPrices[item.asset.name] ?? ""),
+                    change24h: change24h(for: item),
+                    volume: item.dayNtlVlm
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture {
                     onSelect(item.asset)
                     showPicker = false
-                } label: {
-                    MarketRowView(
-                        coin: item.asset.name,
-                        price: Double(midPrices[item.asset.name] ?? ""),
-                        change24h: change24h(for: item),
-                        volume: item.dayNtlVlm
-                    )
                 }
-                .buttonStyle(.plain)
             }
             .listStyle(.plain)
             .navigationTitle("Select Asset")
@@ -89,10 +89,14 @@ struct MarketPicker: View {
 private struct MarketPickerButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.vertical, 4)
-            .padding(.horizontal, 8)
-            .background(configuration.isPressed ? Color.accentColor.opacity(0.1) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(.vertical, 6)
+            .padding(.horizontal, 10)
+            .background(configuration.isPressed ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color(.systemGray4), lineWidth: 0.5)
+            )
     }
 }
 

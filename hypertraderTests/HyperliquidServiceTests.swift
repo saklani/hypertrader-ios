@@ -5,7 +5,7 @@ import Foundation
 // MARK: - HLCandle Decoding Tests
 
 @Suite("HLCandle Decoding")
-struct HLCandleDecodingTests {
+@MainActor struct HLCandleDecodingTests {
 
     // Real candle JSON from Hyperliquid testnet API (verified via Python)
     static let realCandleJSON = """
@@ -108,44 +108,23 @@ struct WebSocketMessageTests {
 
     @Test @MainActor func parsesCandle() {
         let service = HyperliquidWebSocketService.shared
-        service.setCandles([]) // clear
+        var received: [HLCandle] = []
+        service.onCandleUpdate = { received.append($0) }
 
         service.handleMessage(WebSocketMessageTests.candleMessage)
 
-        #expect(service.candles.count == 1)
-        #expect(service.candles[0].s == "BTC")
-        #expect(service.candles[0].open == 72538.0)
-        #expect(service.candles[0].close == 72824.0)
+        #expect(received.count == 1)
+        #expect(received[0].s == "BTC")
+        #expect(received[0].open == 72538.0)
+        #expect(received[0].close == 72824.0)
 
-        service.setCandles([]) // cleanup
+        service.onCandleUpdate = nil
     }
 
-    @Test @MainActor func candleUpdateInPlace() {
+    @Test @MainActor func candleCallbackFires() {
         let service = HyperliquidWebSocketService.shared
-        service.setCandles([])
-
-        // First candle
-        let msg1 = """
-        {"channel":"candle","data":{"t":1774486800000,"T":1774490399999,"s":"BTC","i":"1h","o":"72538.0","c":"72824.0","h":"73086.0","l":"71344.0","v":"1.50051","n":611}}
-        """
-        service.handleMessage(msg1)
-        #expect(service.candles.count == 1)
-        #expect(service.candles[0].close == 72824.0)
-
-        // Same timestamp, updated close price
-        let msg2 = """
-        {"channel":"candle","data":{"t":1774486800000,"T":1774490399999,"s":"BTC","i":"1h","o":"72538.0","c":"73000.0","h":"73100.0","l":"71344.0","v":"2.00000","n":700}}
-        """
-        service.handleMessage(msg2)
-        #expect(service.candles.count == 1) // still 1, not appended
-        #expect(service.candles[0].close == 73000.0) // updated
-
-        service.setCandles([]) // cleanup
-    }
-
-    @Test @MainActor func newCandleAppends() {
-        let service = HyperliquidWebSocketService.shared
-        service.setCandles([])
+        var received: [HLCandle] = []
+        service.onCandleUpdate = { received.append($0) }
 
         let msg1 = """
         {"channel":"candle","data":{"t":1774486800000,"T":1774490399999,"s":"BTC","i":"1h","o":"72538.0","c":"72824.0","h":"73086.0","l":"71344.0","v":"1.50051","n":611}}
@@ -157,22 +136,25 @@ struct WebSocketMessageTests {
         service.handleMessage(msg1)
         service.handleMessage(msg2)
 
-        #expect(service.candles.count == 2)
-        #expect(service.candles[0].t == 1774486800000)
-        #expect(service.candles[1].t == 1774490400000)
+        #expect(received.count == 2)
+        #expect(received[0].t == 1774486800000)
+        #expect(received[1].t == 1774490400000)
 
-        service.setCandles([]) // cleanup
+        service.onCandleUpdate = nil
     }
 
     @Test @MainActor func ignoresUnknownChannel() {
         let service = HyperliquidWebSocketService.shared
         let beforeMids = service.mids
-        let beforeCandles = service.candles.count
+        var candleReceived = false
+        service.onCandleUpdate = { _ in candleReceived = true }
 
         service.handleMessage(WebSocketMessageTests.subscriptionResponse)
 
         #expect(service.mids == beforeMids)
-        #expect(service.candles.count == beforeCandles)
+        #expect(candleReceived == false)
+
+        service.onCandleUpdate = nil
     }
 
     @Test @MainActor func ignoresInvalidJSON() {
@@ -188,27 +170,25 @@ struct WebSocketMessageTests {
 
     @Test @MainActor func ignoresMalformedCandle() {
         let service = HyperliquidWebSocketService.shared
-        service.setCandles([])
+        var candleReceived = false
+        service.onCandleUpdate = { _ in candleReceived = true }
 
-        // Missing required fields
         let badCandle = """
         {"channel":"candle","data":{"t":123,"s":"BTC"}}
         """
         service.handleMessage(badCandle)
-        #expect(service.candles.count == 0)
+        #expect(candleReceived == false)
 
-        service.setCandles([]) // cleanup
+        service.onCandleUpdate = nil
     }
 }
 
-// MARK: - setCandles Tests
+// MARK: - Candle Array Decoding
 
-@Suite("Candle Snapshot")
-struct CandleSnapshotTests {
+@Suite("Candle Array Decoding")
+@MainActor struct CandleArrayDecodingTests {
 
-    @Test @MainActor func setCandlesPopulatesArray() throws {
-        let service = HyperliquidWebSocketService.shared
-
+    @Test func decodesArrayFromREST() throws {
         let json = """
         [
             {"t":1774486800000,"T":1774490399999,"s":"BTC","i":"1h","o":"72538.0","c":"72824.0","h":"73086.0","l":"71344.0","v":"1.50051","n":611},
@@ -216,41 +196,17 @@ struct CandleSnapshotTests {
         ]
         """
         let candles = try JSONDecoder().decode([HLCandle].self, from: json.data(using: .utf8)!)
-        service.setCandles(candles)
 
-        #expect(service.candles.count == 2)
-        #expect(service.candles[0].open == 72538.0)
-        #expect(service.candles[1].open == 72824.0)
-
-        service.setCandles([]) // cleanup
-    }
-
-    @Test @MainActor func setCandlesReplacesExisting() throws {
-        let service = HyperliquidWebSocketService.shared
-
-        let json1 = """
-        [{"t":1774486800000,"T":1774490399999,"s":"BTC","i":"1h","o":"72538.0","c":"72824.0","h":"73086.0","l":"71344.0","v":"1.50051","n":611}]
-        """
-        let json2 = """
-        [{"t":9999999999999,"T":9999999999999,"s":"ETH","i":"5m","o":"3000.0","c":"3100.0","h":"3200.0","l":"2900.0","v":"50.0","n":100}]
-        """
-
-        service.setCandles(try JSONDecoder().decode([HLCandle].self, from: json1.data(using: .utf8)!))
-        #expect(service.candles.count == 1)
-        #expect(service.candles[0].s == "BTC")
-
-        service.setCandles(try JSONDecoder().decode([HLCandle].self, from: json2.data(using: .utf8)!))
-        #expect(service.candles.count == 1)
-        #expect(service.candles[0].s == "ETH")
-
-        service.setCandles([]) // cleanup
+        #expect(candles.count == 2)
+        #expect(candles[0].open == 72538.0)
+        #expect(candles[1].open == 72824.0)
     }
 }
 
 // MARK: - HLAsset / HLAssetMeta Decoding
 
 @Suite("HLAsset Decoding")
-struct HLAssetDecodingTests {
+@MainActor struct HLAssetDecodingTests {
 
     static let metaJSON = """
     {"universe":[{"szDecimals":2,"name":"SOL","maxLeverage":10,"marginTableId":10},{"szDecimals":2,"name":"APT","maxLeverage":3,"marginTableId":3}]}
@@ -293,7 +249,7 @@ struct HLAssetDecodingTests {
 // MARK: - HLAssetCtx / HLMetaAndAssetCtxs Decoding
 
 @Suite("HLAssetCtx Decoding")
-struct HLAssetCtxDecodingTests {
+@MainActor struct HLAssetCtxDecodingTests {
 
     static let ctxJSON = """
     {"funding":"0.0001660966","openInterest":"7466.18","prevDayPx":"79.651","dayNtlVlm":"505415.4002299999","premium":"0.002153904","oraclePx":"79.855","markPx":"80.036","midPx":"80.0595","impactPxs":["80.027","80.1786"],"dayBaseVlm":"6346.44"}
@@ -336,7 +292,7 @@ struct HLAssetCtxDecodingTests {
 // MARK: - HLSpot Decoding
 
 @Suite("HLSpot Decoding")
-struct HLSpotDecodingTests {
+@MainActor struct HLSpotDecodingTests {
 
     static let tokenJSON = """
     {"name":"USDC","szDecimals":8,"weiDecimals":8,"index":0,"tokenId":"0xeb62eee3685fc4c43992febcd9e75443","isCanonical":true,"evmContract":{"address":"0x0b80659a4076e9e93c7dbe0f10675a16a3e5c206","evm_extra_wei_decimals":-2},"fullName":null,"deployerTradingFeeShare":"0.0"}
@@ -381,7 +337,7 @@ struct HLSpotDecodingTests {
 // MARK: - HLPerpDex Decoding
 
 @Suite("HLPerpDex Decoding")
-struct HLPerpDexDecodingTests {
+@MainActor struct HLPerpDexDecodingTests {
 
     static let dexsJSON = """
     [null,{"name":"test","fullName":"test dex","deployer":"0x5e89b26d8d66da9888c835c9bfcc2aa51813e152","oracleUpdater":null,"feeRecipient":null,"assetToStreamingOiCap":[]},{"name":"unit","fullName":"unit dex","deployer":"0x888888880c61928866d8fcd1ac8655b7760b9f71"}]
@@ -405,7 +361,7 @@ struct HLPerpDexDecodingTests {
 // MARK: - HLFill Decoding
 
 @Suite("HLFill Decoding")
-struct HLFillDecodingTests {
+@MainActor struct HLFillDecodingTests {
 
     static let minimalJSON = """
     {"coin":"BTC","side":"B","px":"94500.00","sz":"0.0500","time":1775200000000,"fee":"0.50","oid":12345}
@@ -453,7 +409,7 @@ struct HLFillDecodingTests {
 // MARK: - HLClearinghouseState Decoding
 
 @Suite("HLClearinghouseState Decoding")
-struct HLClearinghouseStateDecodingTests {
+@MainActor struct HLClearinghouseStateDecodingTests {
 
     static let stateJSON = """
     {"marginSummary":{"accountValue":"10000.0","totalNtlPos":"5000.0","totalRawUsd":"5000.0","totalMarginUsed":"500.0"},"crossMarginSummary":{"accountValue":"10000.0","totalNtlPos":"5000.0","totalRawUsd":"5000.0","totalMarginUsed":"500.0"},"crossMaintenanceMarginUsed":"250.0","withdrawable":"9500.0","assetPositions":[{"type":"oneWay","position":{"coin":"BTC","szi":"0.05","entryPx":"94500.0","positionValue":"4725.0","unrealizedPnl":"31.18","returnOnEquity":"0.066","liquidationPx":"88000.0","marginUsed":"472.5","leverage":{"type":"cross","value":10,"rawUsd":"4725.0"},"maxLeverage":50,"cumFunding":{"allTime":"12.50","sinceChange":"3.20","sinceOpen":"5.10"}}}]}
@@ -492,43 +448,27 @@ struct HLClearinghouseStateDecodingTests {
 
 // MARK: - HLCandle Flexible Decode (String vs Number)
 
-@Suite("HLCandle Flexible Decode")
-struct HLCandleFlexibleDecodeTests {
+@Suite("HLCandle String Decode")
+@MainActor struct HLCandleStringDecodeTests {
 
-    @Test func decodesStringFormat() throws {
+    @Test func decodesStringFields() throws {
         let json = """
         {"t":1775217600000,"T":1775221199999,"s":"BTC","i":"1h","o":"68654.0","c":"68375.0","h":"68846.0","l":"67986.0","v":"0.21984","n":114}
         """
         let candle = try JSONDecoder().decode(HLCandle.self, from: json.data(using: .utf8)!)
+        #expect(candle.o == "68654.0")
+        #expect(candle.c == "68375.0")
+        #expect(candle.v == "0.21984")
         #expect(candle.open == 68654.0)
         #expect(candle.close == 68375.0)
         #expect(candle.volume == 0.21984)
-    }
-
-    @Test func decodesNumberFormat() throws {
-        let json = """
-        {"t":1775217600000,"T":1775221199999,"s":"BTC","i":"1h","o":68654.0,"c":68375.0,"h":68846.0,"l":67986.0,"v":0.21984,"n":114}
-        """
-        let candle = try JSONDecoder().decode(HLCandle.self, from: json.data(using: .utf8)!)
-        #expect(candle.open == 68654.0)
-        #expect(candle.close == 68375.0)
-        #expect(candle.volume == 0.21984)
-    }
-
-    @Test func decodesIntegerNumbers() throws {
-        let json = """
-        {"t":1775217600000,"T":1775221199999,"s":"BTC","i":"1h","o":68654,"c":68375,"h":68846,"l":67986,"v":1,"n":114}
-        """
-        let candle = try JSONDecoder().decode(HLCandle.self, from: json.data(using: .utf8)!)
-        #expect(candle.open == 68654.0)
-        #expect(candle.volume == 1.0)
     }
 }
 
 // MARK: - perpCategories Decoding
 
 @Suite("PerpCategories Decoding")
-struct PerpCategoriesDecodingTests {
+@MainActor struct PerpCategoriesDecodingTests {
 
     @Test func decodesCategories() throws {
         let json = """

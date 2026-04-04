@@ -117,9 +117,9 @@ struct MsgPackTests {
     }
 }
 
-// MARK: - EthSigner Tests
+// MARK: - EthereumSigner Tests
 
-struct EthSignerTests {
+struct EthereumSignerTests {
 
     // Hardhat account #0
     static let knownPrivateKey = Data([
@@ -130,20 +130,24 @@ struct EthSignerTests {
     ])
 
     @Test func deriveKnownAddress() {
-        let address = EthSigner.deriveAddress(from: Self.knownPrivateKey)
+        let address = EthereumSigner.deriveAddress(from: Self.knownPrivateKey)
         // Hardhat account #0 address (case-insensitive comparison)
         #expect(address.lowercased() == "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266")
     }
 
     @Test func generatePrivateKeyIs32Bytes() {
-        let key = EthSigner.generatePrivateKey()
+        let key = EthereumSigner.generatePrivateKey()
         #expect(key.count == 32)
     }
 
     @Test func generatePrivateKeyIsUnique() {
-        let key1 = EthSigner.generatePrivateKey()
-        let key2 = EthSigner.generatePrivateKey()
+        let key1 = EthereumSigner.generatePrivateKey()
+        let key2 = EthereumSigner.generatePrivateKey()
         #expect(key1 != key2)
+    }
+
+    private static func eip712Digest(_ typedData: EIP712TypedData) throws -> Data {
+        try HyperliquidSigner.hashEIP712(typedData)
     }
 
     @Test func signatureFormat() throws {
@@ -151,7 +155,7 @@ struct EthSignerTests {
             source: "b",
             connectionId: "0x" + String(repeating: "ab", count: 32)
         )
-        let sig = try EthSigner.signTypedData(typedData, privateKey: Self.knownPrivateKey)
+        let sig = try EthereumSigner.sign(privateKey: Self.knownPrivateKey, digest: try Self.eip712Digest(typedData))
         #expect(sig.hasPrefix("0x"))
         #expect(sig.count == 132) // "0x" + 128 hex (r+s) + 2 hex (v)
     }
@@ -161,8 +165,8 @@ struct EthSignerTests {
             source: "b",
             connectionId: "0x" + String(repeating: "cd", count: 32)
         )
-        let sig1 = try EthSigner.signTypedData(typedData, privateKey: Self.knownPrivateKey)
-        let sig2 = try EthSigner.signTypedData(typedData, privateKey: Self.knownPrivateKey)
+        let sig1 = try EthereumSigner.sign(privateKey: Self.knownPrivateKey, digest: try Self.eip712Digest(typedData))
+        let sig2 = try EthereumSigner.sign(privateKey: Self.knownPrivateKey, digest: try Self.eip712Digest(typedData))
         #expect(sig1 == sig2)
     }
 
@@ -171,18 +175,18 @@ struct EthSignerTests {
             source: "a",
             connectionId: "0x" + String(repeating: "00", count: 32)
         )
-        let sig = try EthSigner.signTypedData(typedData, privateKey: Self.knownPrivateKey)
+        let sig = try EthereumSigner.sign(privateKey: Self.knownPrivateKey, digest: try Self.eip712Digest(typedData))
         let vHex = String(sig.suffix(2))
         let v = Int(vHex, radix: 16)!
         #expect(v == 27 || v == 28)
     }
 
-    @Test func hashTypedDataIs32Bytes() throws {
+    @Test func eip712DigestIs32Bytes() throws {
         let typedData = EIP712Builder.phantomAgent(
             source: "b",
             connectionId: "0x" + String(repeating: "ff", count: 32)
         )
-        let hash = try EthSigner.hashTypedData(typedData)
+        let hash = try Self.eip712Digest(typedData)
         #expect(hash.count == 32)
     }
 }
@@ -351,7 +355,7 @@ struct HyperliquidSignerTests {
     }
 
     @Test func signOrderProducesValidSignature() throws {
-        let key = EthSigner.generatePrivateKey()
+        let key = EthereumSigner.generatePrivateKey()
         let order = HLOrderWire(
             a: 0, b: true, p: "95000", s: "0.01", r: false,
             t: HLOrderTypeWire(limit: HLLimitWire(tif: "Gtc")), c: nil

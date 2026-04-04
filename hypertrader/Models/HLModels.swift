@@ -13,6 +13,9 @@ struct HLAsset: Codable, Identifiable, Hashable {
     let onlyIsolated: Bool?
     let isDelisted: Bool?
     var id: String { name }
+    var displayName: String {
+        name.contains("/") ? name : "\(name)/USDC"
+    }
 }
 
 // MARK: - Clearinghouse State (Positions + Margin)
@@ -179,66 +182,27 @@ struct HLPerpDex: Codable {
 
 // MARK: - Candle (OHLCV)
 
-/// OHLCV candle. Handles both string (REST) and number (WebSocket) formats for price fields.
-struct HLCandle: Identifiable, Sendable {
+/// OHLCV candle. API returns price fields as strings.
+struct HLCandle: Codable, Identifiable, Sendable {
     let t: UInt64   // open time (ms)
     let T: UInt64   // close time (ms)
     let s: String   // coin symbol
     let i: String   // interval
-    let open: Double
-    let close: Double
-    let high: Double
-    let low: Double
-    let volume: Double
+    let o: String   // open price
+    let c: String   // close price
+    let h: String   // high price
+    let l: String   // low price
+    let v: String   // volume (base)
     let n: Int      // number of trades
 
     var id: UInt64 { t }
+    var open: Double { Double(o) ?? 0 }
+    var close: Double { Double(c) ?? 0 }
+    var high: Double { Double(h) ?? 0 }
+    var low: Double { Double(l) ?? 0 }
+    var volume: Double { Double(v) ?? 0 }
     var time: Date { Date(timeIntervalSince1970: Double(t) / 1000) }
     var isBullish: Bool { close >= open }
-}
-
-extension HLCandle: Codable {
-    enum CodingKeys: String, CodingKey {
-        case t, T, s, i, o, c, h, l, v, n
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        t = try container.decode(UInt64.self, forKey: .t)
-        T = try container.decode(UInt64.self, forKey: .T)
-        s = try container.decode(String.self, forKey: .s)
-        i = try container.decode(String.self, forKey: .i)
-        n = try container.decode(Int.self, forKey: .n)
-
-        open = try Self.decodeFlexible(container: container, key: .o)
-        close = try Self.decodeFlexible(container: container, key: .c)
-        high = try Self.decodeFlexible(container: container, key: .h)
-        low = try Self.decodeFlexible(container: container, key: .l)
-        volume = try Self.decodeFlexible(container: container, key: .v)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(t, forKey: .t)
-        try container.encode(T, forKey: .T)
-        try container.encode(s, forKey: .s)
-        try container.encode(i, forKey: .i)
-        try container.encode(open, forKey: .o)
-        try container.encode(close, forKey: .c)
-        try container.encode(high, forKey: .h)
-        try container.encode(low, forKey: .l)
-        try container.encode(volume, forKey: .v)
-        try container.encode(n, forKey: .n)
-    }
-
-    private static func decodeFlexible(container: KeyedDecodingContainer<CodingKeys>, key: CodingKeys) throws -> Double {
-        if let d = try? container.decode(Double.self, forKey: key) { return d }
-        let s = try container.decode(String.self, forKey: key)
-        guard let d = Double(s) else {
-            throw DecodingError.dataCorruptedError(forKey: key, in: container, debugDescription: "Cannot parse '\(s)' as Double")
-        }
-        return d
-    }
 }
 
 // MARK: - Trade Fills (history)
@@ -418,8 +382,24 @@ struct OrderInput {
 
 // MARK: - Helpers
 
+/// Remove trailing zeros from a decimal string (Hyperliquid wire format requirement)
 func formatPrice(_ value: String) -> String {
     guard let decimal = Decimal(string: value) else { return value }
     let formatted = NSDecimalNumber(decimal: decimal).stringValue
     return formatted
+}
+
+/// Format a price for display, matching Hyperliquid UI precision.
+/// >= 10000 → integer, >= 100 → 2 decimals, >= 1 → 4 decimals, < 1 → 6 decimals
+func formatDisplayPrice(_ price: Double) -> String {
+    if price >= 10000 { return String(format: "%.0f", price) }
+    if price >= 100 { return String(format: "%.2f", price) }
+    if price >= 1 { return String(format: "%.4f", price) }
+    return String(format: "%.6f", price)
+}
+
+/// Format a price string for display (parses then formats).
+func formatDisplayPrice(_ price: String) -> String {
+    guard let d = Double(price) else { return price }
+    return formatDisplayPrice(d)
 }

@@ -4,6 +4,7 @@ import Charts
 struct CandlestickChartView: View {
     let candles: [HLCandle]
     var interval: String = "1h"
+    var currentPrice: Double? = nil
 
     var body: some View {
         if candles.isEmpty {
@@ -14,28 +15,47 @@ struct CandlestickChartView: View {
     }
 
     private var chart: some View {
-        Chart(candles) { candle in
-            // Wick: thin vertical line from low to high
-            RuleMark(
-                x: .value("Time", candle.time),
-                yStart: .value("Low", candle.low),
-                yEnd: .value("High", candle.high)
-            )
-            .lineStyle(StrokeStyle(lineWidth: 1))
-            .foregroundStyle(candle.isBullish ? Color.green : Color.red)
+        Chart {
+            ForEach(candles) { candle in
+                // Wick
+                RuleMark(
+                    x: .value("Time", candle.time),
+                    yStart: .value("Low", candle.low),
+                    yEnd: .value("High", candle.high)
+                )
+                .lineStyle(StrokeStyle(lineWidth: 1))
+                .foregroundStyle(candle.isBullish ? Color.green : Color.red)
 
-            // Body: rectangle from open to close
-            RectangleMark(
-                x: .value("Time", candle.time),
-                yStart: .value("Open", candle.open),
-                yEnd: .value("Close", candle.close),
-                width: .fixed(bodyWidth)
-            )
-            .foregroundStyle(candle.isBullish ? Color.green : Color.red)
+                // Body
+                RectangleMark(
+                    x: .value("Time", candle.time),
+                    yStart: .value("Open", candle.open),
+                    yEnd: .value("Close", candle.close),
+                    width: .fixed(bodyWidth)
+                )
+                .foregroundStyle(candle.isBullish ? Color.green : Color.red)
+            }
+
+            // Current price line
+            if let price = currentPrice {
+                RuleMark(y: .value("Price", price))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    .foregroundStyle(Color.accentColor.opacity(0.7))
+                    .annotation(position: .trailing, alignment: .leading, spacing: 4) {
+                        Text(formatChartPrice(price))
+                            .font(.caption2.bold().monospaced())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                    }
+            }
         }
         .chartScrollableAxes(.horizontal)
         .chartXVisibleDomain(length: visibleDomainSeconds)
         .chartScrollPosition(initialX: initialScrollPosition)
+        .chartXScale(domain: xDomain)
         .chartYScale(domain: yDomain)
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 5)) { _ in
@@ -45,19 +65,19 @@ struct CandlestickChartView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 5)) { _ in
+            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { _ in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.3))
                 AxisValueLabel()
                     .font(.caption2.monospaced())
             }
         }
-        .frame(height: 250)
+        .frame(height: UIScreen.main.bounds.height * 0.5)
     }
 
     private var emptyState: some View {
         Rectangle()
             .fill(Color(.systemGray6))
-            .frame(height: 250)
+            .frame(height: UIScreen.main.bounds.height * 0.5)
             .overlay {
                 ProgressView("Loading chart...")
                     .font(.caption)
@@ -67,26 +87,37 @@ struct CandlestickChartView: View {
     // MARK: - Layout
 
     /// Number of candles visible at once.
-    private var visibleCandleCount: Int { 40 }
+    private var visibleCandleCount: Int { 50 }
 
     /// Visible domain in seconds.
     private var visibleDomainSeconds: Int {
         visibleCandleCount * intervalSeconds
     }
 
-    /// Start scrolled to the right (most recent candles).
+    private var rightPaddingCandles: Int { 5 }
+
+    /// X-axis domain: from first candle to last candle + 5 candles of padding on the right.
+    private var xDomain: ClosedRange<Date> {
+        let first = candles.first?.time ?? Date()
+        let last = candles.last?.time ?? Date()
+        let rightPadding = Double(rightPaddingCandles * intervalSeconds)
+        return first...last.addingTimeInterval(rightPadding)
+    }
+
+    /// Start scrolled to the end (most recent candles + padding visible).
     private var initialScrollPosition: Date {
-        let totalSeconds = Double(candles.count * intervalSeconds)
+        let last = candles.last?.time ?? Date()
+        let rightPadding = Double(rightPaddingCandles * intervalSeconds)
+        let endOfDomain = last.addingTimeInterval(rightPadding)
         let visibleSeconds = Double(visibleDomainSeconds)
-        let offsetSeconds = max(0, totalSeconds - visibleSeconds)
-        return candles.first?.time.addingTimeInterval(offsetSeconds) ?? Date()
+        return endOfDomain.addingTimeInterval(-visibleSeconds)
     }
 
     /// Body width in points. Screen width / visible candles, minus gap.
     private var bodyWidth: CGFloat {
-        let screenWidth: CGFloat = 350 // approximate chart plot area
+        let screenWidth = UIScreen.main.bounds.width - 60 // chart plot area minus axis/padding
         let candleSlot = screenWidth / CGFloat(visibleCandleCount)
-        return max(2, candleSlot - 2) // 2px gap between candles
+        return max(3, candleSlot - 3)
     }
 
     private var intervalSeconds: Int {
@@ -119,6 +150,10 @@ struct CandlestickChartView: View {
         let padding = (maxHigh - minLow) * 0.05
         return (minLow - padding)...(maxHigh + padding)
     }
+
+    private func formatChartPrice(_ price: Double) -> String {
+        formatDisplayPrice(price)
+    }
 }
 
 // MARK: - Mock Data Helper
@@ -146,9 +181,9 @@ private func mockCandles(count: Int = 200, interval: String = "1h", basePrice: D
         return HLCandle(
             t: time, T: time + UInt64(intervalSeconds * 1000),
             s: "BTC", i: interval,
-            open: open, close: close,
-            high: high, low: low,
-            volume: 12.5, n: 100
+            o: String(format: "%.2f", open), c: String(format: "%.2f", close),
+            h: String(format: "%.2f", high), l: String(format: "%.2f", low),
+            v: "12.5", n: 100
         )
     }
 }

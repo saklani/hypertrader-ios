@@ -14,8 +14,9 @@ struct IntervalPickerBar: View {
                 } label: {
                     Text(interval)
                         .font(.caption.bold())
-                        .frame(maxWidth: .infinity)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.vertical, 8)
+                        .contentShape(Rectangle())
                         .background(selected == interval ? Color.accentColor.opacity(0.15) : Color.clear)
                         .foregroundStyle(selected == interval ? Color.accentColor : .secondary)
                 }

@@ -25,7 +25,7 @@ final class HyperliquidExchangeService {
             agentPrivateKey: agentKey
         )
 
-        var action: [String: Any] = [
+        let action: [String: Any] = [
             "type": "order",
             "orders": [[
                 "a": orderWire.a,

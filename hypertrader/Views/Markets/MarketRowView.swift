@@ -35,13 +35,7 @@ struct MarketRowView: View {
 
     private var formattedPrice: String {
         guard let price else { return "--" }
-        if price >= 1000 {
-            return String(format: "$%.2f", price)
-        } else if price >= 1 {
-            return String(format: "$%.4f", price)
-        } else {
-            return String(format: "$%.6f", price)
-        }
+        return "$\(formatDisplayPrice(price))"
     }
 
     private var formattedChange: String {

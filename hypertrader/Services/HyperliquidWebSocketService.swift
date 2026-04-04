@@ -17,8 +17,10 @@ final class HyperliquidWebSocketService {
     static let shared = HyperliquidWebSocketService()
 
     private(set) var mids: [String: String] = [:]
-    private(set) var candles: [HLCandle] = []
     private(set) var isConnected = false
+
+    /// Callback for live candle updates. Registered by the ViewModel.
+    var onCandleUpdate: ((HLCandle) -> Void)?
 
     private var webSocket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
@@ -31,7 +33,7 @@ final class HyperliquidWebSocketService {
     private var subscribedCandleInterval: String?
 
     private init() {
-        wsURL = URL(string: "wss://api.hyperliquid-testnet.xyz/ws")!
+        wsURL = URL(string: "wss://api.hyperliquid.xyz/ws")!
     }
 
     // MARK: - Connect
@@ -92,17 +94,11 @@ final class HyperliquidWebSocketService {
         }
         subscribedCandleCoin = nil
         subscribedCandleInterval = nil
-        candles = []
     }
 
     private func sendCandleSubscribe(ws: URLSessionWebSocketTask, coin: String, interval: String) {
         let msg = "{\"method\":\"subscribe\",\"subscription\":{\"type\":\"candle\",\"coin\":\"\(coin)\",\"interval\":\"\(interval)\"}}"
         ws.send(.string(msg)) { _ in }
-    }
-
-    /// Set initial candle history (from REST snapshot).
-    func setCandles(_ initialCandles: [HLCandle]) {
-        candles = initialCandles
     }
 
     // MARK: - Receive Loop
@@ -184,11 +180,7 @@ final class HyperliquidWebSocketService {
         case .mids(let newMids):
             mids = newMids
         case .candle(let candle):
-            if let lastIndex = candles.lastIndex(where: { $0.t == candle.t }) {
-                candles[lastIndex] = candle
-            } else {
-                candles.append(candle)
-            }
+            onCandleUpdate?(candle)
         }
     }
 
@@ -199,15 +191,6 @@ final class HyperliquidWebSocketService {
         if let parsed = Self.parseMessage(text) {
             applyParsed(parsed)
         }
-    }
-
-    // Keep for test compatibility
-    func handleCandleUpdate(_ data: [String: Any]) {
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: data),
-              let candle = try? JSONDecoder().decode(HLCandle.self, from: jsonData) else {
-            return
-        }
-        applyParsed(.candle(candle))
     }
 
     // MARK: - Reconnection

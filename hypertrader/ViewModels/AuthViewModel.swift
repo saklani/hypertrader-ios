@@ -39,11 +39,11 @@ final class AuthViewModel {
             if let existing = KeychainManager.loadAgentKey() {
                 agentKey = existing
             } else {
-                agentKey = EthSigner.generatePrivateKey()
+                agentKey = EthereumSigner.generatePrivateKey()
                 try KeychainManager.saveAgentKey(agentKey)
             }
 
-            let agentAddr = EthSigner.deriveAddress(from: agentKey)
+            let agentAddr = EthereumSigner.deriveAddress(from: agentKey)
             agentAddress = agentAddr
 
             // Build approveAgent typed data
