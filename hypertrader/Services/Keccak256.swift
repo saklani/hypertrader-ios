@@ -2,7 +2,7 @@ import Foundation
 
 /// Keccak256 hash function (Ethereum's hash, NOT NIST SHA-3-256).
 /// Pure Swift implementation — no external dependencies.
-enum Keccak {
+nonisolated enum Keccak {
 
     /// Compute Keccak256 hash of raw bytes
     static func keccak256(_ input: [UInt8]) -> [UInt8] {

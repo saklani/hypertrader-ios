@@ -2,57 +2,60 @@ import Foundation
 
 /// Constructs Hyperliquid action payloads and signs them locally with the agent key.
 /// Includes EIP-712 typed data encoding for Hyperliquid's L1 actions.
-enum HyperliquidSigner {
+nonisolated enum HyperliquidSigner {
 
-    // MARK: - Sign Order
+    // MARK: - Sign L1 Action
 
-    static func signOrder(
-        orders: [HLOrderWire],
-        grouping: String = "na",
-        builder: HLBuilderWire? = nil,
-        agentPrivateKey: Data,
-        isTestnet: Bool = true
-    ) throws -> (signature: HLSignature, nonce: UInt64) {
-        let action = HLOrderAction(orders: orders, grouping: grouping, builder: builder)
-        return try signL1Action(action: action, agentPrivateKey: agentPrivateKey, isTestnet: isTestnet)
-    }
+    /// action → MessagePack → append nonce → Keccak256 → phantom agent → EIP-712 → sign.
+    /// Runs entirely off the main thread via `Task.detached`.
+    static func sign<T: Encodable & Sendable>(
+        privateKey: Data,
+        action: T
+    ) async throws -> (signature: HLSignature, nonce: UInt64) {
+        try await Task.detached {
+            let nonce = generateNonce()
 
-    // MARK: - Sign Cancel
+            // 1. MessagePack serialize the action
+            let messagePackData = try MessagePackEncoder().encode(action)
 
-    static func signCancel(
-        cancels: [HLCancelWire],
-        agentPrivateKey: Data,
-        isTestnet: Bool = true
-    ) throws -> (signature: HLSignature, nonce: UInt64) {
-        let action = HLCancelAction(cancels: cancels)
-        return try signL1Action(action: action, agentPrivateKey: agentPrivateKey, isTestnet: isTestnet)
-    }
+            // 2. Build hash input: msgpack_bytes + nonce(u64 BE) + vault(0x00)
+            var hashInput = Data(messagePackData)
+            withUnsafeBytes(of: nonce.bigEndian) { bytes in
+                hashInput.append(contentsOf: bytes)
+            }
+            hashInput.append(0x00)
 
-    // MARK: - ApproveAgent (typed data for master wallet to sign via WalletConnect)
+            // 3. Keccak256 hash → actionHash
+            let actionHash = Keccak.keccak256(Array(hashInput))
+            let actionHashHex = "0x" + Data(actionHash).toHexString()
 
-    static func buildApproveAgentTypedData(
-        agentAddress: String,
-        agentName: String = "hypertrader",
-        nonce: UInt64,
-        isTestnet: Bool = true
-    ) -> EIP712TypedData {
-        EIP712Builder.approveAgent(
-            agentAddress: agentAddress,
-            agentName: agentName,
-            nonce: nonce,
-            isTestnet: isTestnet
-        )
+            // 4. Build phantom agent EIP-712 typed data
+            let typedData = EIP712Builder.phantomAgent(source: HyperliquidConfig.phantomAgentSource, connectionId: actionHashHex)
+
+            // 5. EIP-712 hash: keccak256(0x19 0x01 || domainSeparator || messageHash)
+            let digest = try hashEIP712(typedData)
+
+            // 6. Sign with agent key
+            let signatureHex = try EthereumSigner.sign(privateKey: privateKey, digest: digest)
+
+            guard let signature = parse(signature: signatureHex) else {
+                throw HLError.signingFailed("Failed to parse signature")
+            }
+
+            return (signature, nonce)
+        }.value
     }
 
     // MARK: - Nonce
 
+    /// Millisecond timestamp. Per HL docs: "Recommended to use the current timestamp in milliseconds."
     static func generateNonce() -> UInt64 {
         UInt64(Date().timeIntervalSince1970 * 1000)
     }
 
     // MARK: - Signature Parsing
 
-    static func parseSignature(_ signatureHex: String) -> HLSignature? {
+    static func parse(signature signatureHex: String) -> HLSignature? {
         var hex = signatureHex
         if hex.hasPrefix("0x") {
             hex = String(hex.dropFirst(2))
@@ -68,47 +71,6 @@ enum HyperliquidSigner {
         if v < 27 { v += 27 }
 
         return HLSignature(r: r, s: s, v: v)
-    }
-
-    // MARK: - Core L1 Signing Flow
-
-    /// action → MessagePack → append nonce → Keccak256 → phantom agent → EIP-712 → sign
-    private static func signL1Action<T: Encodable>(
-        action: T,
-        agentPrivateKey: Data,
-        isTestnet: Bool
-    ) throws -> (signature: HLSignature, nonce: UInt64) {
-        let nonce = generateNonce()
-
-        // 1. MessagePack serialize the action
-        let msgpackData = try MsgPackEncoder().encode(action)
-
-        // 2. Build hash input: msgpack_bytes + nonce(u64 BE) + vault(0x00)
-        var hashInput = Data(msgpackData)
-        withUnsafeBytes(of: nonce.bigEndian) { bytes in
-            hashInput.append(contentsOf: bytes)
-        }
-        hashInput.append(0x00)
-
-        // 3. Keccak256 hash → actionHash
-        let actionHash = Keccak.keccak256(Array(hashInput))
-        let actionHashHex = "0x" + Data(actionHash).toHexString()
-
-        // 4. Build phantom agent EIP-712 typed data
-        let source = isTestnet ? "b" : "a"
-        let typedData = EIP712Builder.phantomAgent(source: source, connectionId: actionHashHex)
-
-        // 5. EIP-712 hash: keccak256(0x19 0x01 || domainSeparator || messageHash)
-        let digest = try hashEIP712(typedData)
-
-        // 6. Sign with agent key
-        let signatureHex = try EthereumSigner.sign(privateKey: agentPrivateKey, digest: digest)
-
-        guard let signature = parseSignature(signatureHex) else {
-            throw HLError.signingFailed("Failed to parse signature")
-        }
-
-        return (signature, nonce)
     }
 
     // MARK: - EIP-712 Hashing

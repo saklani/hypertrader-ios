@@ -40,30 +40,30 @@ struct Keccak256Tests {
 
 // MARK: - MessagePack Encoder Tests
 
-struct MsgPackTests {
+struct MessagePackTests {
 
     @Test func encodeBoolTrue() throws {
-        let data = try MsgPackEncoder().encode(true)
+        let data = try MessagePackEncoder().encode(true)
         #expect(data == Data([0xc3]))
     }
 
     @Test func encodeBoolFalse() throws {
-        let data = try MsgPackEncoder().encode(false)
+        let data = try MessagePackEncoder().encode(false)
         #expect(data == Data([0xc2]))
     }
 
     @Test func encodeSmallPositiveInt() throws {
-        let data = try MsgPackEncoder().encode(42)
+        let data = try MessagePackEncoder().encode(42)
         #expect(data == Data([0x2a]))
     }
 
     @Test func encodeZero() throws {
-        let data = try MsgPackEncoder().encode(0)
+        let data = try MessagePackEncoder().encode(0)
         #expect(data == Data([0x00]))
     }
 
     @Test func encodeString() throws {
-        let data = try MsgPackEncoder().encode("hello")
+        let data = try MessagePackEncoder().encode("hello")
         // fixstr: 0xa0 | 5 = 0xa5, then "hello" utf8
         #expect(data[0] == 0xa5)
         #expect(Data(data[1...]) == Data("hello".utf8))
@@ -74,20 +74,20 @@ struct MsgPackTests {
             let a: Int
             let b: Bool
         }
-        let data = try MsgPackEncoder().encode(TestStruct(a: 1, b: true))
+        let data = try MessagePackEncoder().encode(TestStruct(a: 1, b: true))
         // Should be a map with 2 entries
         #expect(data[0] == 0x82) // fixmap with 2 entries
         #expect(data.count > 2)
     }
 
     @Test func encodeArrayOfInts() throws {
-        let data = try MsgPackEncoder().encode([1, 2, 3])
+        let data = try MessagePackEncoder().encode([1, 2, 3])
         // fixarray with 3 elements: 0x93
         #expect(data[0] == 0x93)
     }
 
     @Test func encodeConsistently() throws {
-        let encoder = MsgPackEncoder()
+        let encoder = MessagePackEncoder()
         let value = ["key": "value"]
         let first = try encoder.encode(value)
         let second = try encoder.encode(value)
@@ -98,9 +98,9 @@ struct MsgPackTests {
         struct WithOptional: Codable {
             let x: String?
         }
-        let data = try MsgPackEncoder().encode(WithOptional(x: nil))
-        // Map with 1 entry, value should be nil (0xc0)
-        #expect(data.contains(0xc0))
+        let data = try MessagePackEncoder().encode(WithOptional(x: nil))
+        // Nil optionals are skipped — map should have 0 entries (0x80)
+        #expect(data[0] == 0x80) // fixmap with 0 entries
     }
 
     @Test func encodeHLOrderAction() throws {
@@ -109,10 +109,10 @@ struct MsgPackTests {
             t: HLOrderTypeWire(limit: HLLimitWire(tif: "Gtc")), c: nil
         )
         let action = HLOrderAction(orders: [order], grouping: "na", builder: nil)
-        let data = try MsgPackEncoder().encode(action)
+        let data = try MessagePackEncoder().encode(action)
         #expect(data.count > 0)
         // Re-encode should be identical
-        let data2 = try MsgPackEncoder().encode(action)
+        let data2 = try MessagePackEncoder().encode(action)
         #expect(data == data2)
     }
 }
@@ -306,42 +306,41 @@ struct HyperliquidSignerTests {
         let s = String(repeating: "cd", count: 32)
         let hex = "0x" + r + s + "1b"
 
-        let sig = HyperliquidSigner.parseSignature(hex)
+        let sig = HyperliquidSigner.parse(signature:hex)
         #expect(sig != nil)
         #expect(sig?.r == "0x" + r)
         #expect(sig?.s == "0x" + s)
         #expect(sig?.v == 27)
     }
 
-    @Test func parseSignatureNormalizesV() {
+    @Test func parseNormalizesV() {
         let r = String(repeating: "00", count: 32)
         let s = String(repeating: "00", count: 32)
 
         // v = 0x00 should normalize to 27
-        let sig0 = HyperliquidSigner.parseSignature("0x" + r + s + "00")
+        let sig0 = HyperliquidSigner.parse(signature:"0x" + r + s + "00")
         #expect(sig0?.v == 27)
 
         // v = 0x01 should normalize to 28
-        let sig1 = HyperliquidSigner.parseSignature("0x" + r + s + "01")
+        let sig1 = HyperliquidSigner.parse(signature:"0x" + r + s + "01")
         #expect(sig1?.v == 28)
     }
 
     @Test func parseInvalidSignatureReturnsNil() {
-        #expect(HyperliquidSigner.parseSignature("0xtooshort") == nil)
-        #expect(HyperliquidSigner.parseSignature("") == nil)
+        #expect(HyperliquidSigner.parse(signature:"0xtooshort") == nil)
+        #expect(HyperliquidSigner.parse(signature:"") == nil)
     }
 
-    @Test func buildApproveAgentTypedData() {
-        let typedData = HyperliquidSigner.buildApproveAgentTypedData(
+    @Test func approveAgentTypedData() {
+        let typedData = EIP712Builder.approveAgent(
             agentAddress: "0x1234567890abcdef1234567890abcdef12345678",
-            nonce: 1700000000000,
-            isTestnet: true
+            nonce: 1700000000000
         )
         #expect(typedData.primaryType == "HyperliquidTransaction:ApproveAgent")
 
-        // Domain should have testnet chainId (421614)
+        // Domain should have configured chainId
         if case .int(let chainId) = typedData.domain["chainId"] {
-            #expect(chainId == 421614)
+            #expect(chainId == HyperliquidConfig.userSignedChainId)
         } else {
             Issue.record("chainId missing or wrong type")
         }
@@ -354,15 +353,14 @@ struct HyperliquidSignerTests {
         }
     }
 
-    @Test func signOrderProducesValidSignature() throws {
+    @Test func signActionProducesValidSignature() async throws {
         let key = EthereumSigner.generatePrivateKey()
         let order = HLOrderWire(
             a: 0, b: true, p: "95000", s: "0.01", r: false,
             t: HLOrderTypeWire(limit: HLLimitWire(tif: "Gtc")), c: nil
         )
-        let (sig, nonce) = try HyperliquidSigner.signOrder(
-            orders: [order], agentPrivateKey: key
-        )
+        let action = HLOrderAction(orders: [order], grouping: "na", builder: nil)
+        let (sig, nonce) = try await HyperliquidSigner.sign(privateKey: key, action: action)
         #expect(sig.r.hasPrefix("0x"))
         #expect(sig.s.hasPrefix("0x"))
         #expect(sig.v == 27 || sig.v == 28)
@@ -425,29 +423,17 @@ struct EIP712TypesTests {
         #expect(td.types["Agent"]?.count == 2)
     }
 
-    @Test func approveAgentBuilderTestnet() {
+    @Test func approveAgentBuilderUsesConfig() {
         let td = EIP712Builder.approveAgent(
             agentAddress: "0xabc",
-            nonce: 123,
-            isTestnet: true
+            nonce: 123
         )
         #expect(td.primaryType == "HyperliquidTransaction:ApproveAgent")
         if case .string(let chain) = td.message["hyperliquidChain"] {
-            #expect(chain == "Testnet")
-        }
-    }
-
-    @Test func approveAgentBuilderMainnet() {
-        let td = EIP712Builder.approveAgent(
-            agentAddress: "0xabc",
-            nonce: 123,
-            isTestnet: false
-        )
-        if case .string(let chain) = td.message["hyperliquidChain"] {
-            #expect(chain == "Mainnet")
+            #expect(chain == HyperliquidConfig.chainName)
         }
         if case .int(let chainId) = td.domain["chainId"] {
-            #expect(chainId == 42161)
+            #expect(chainId == HyperliquidConfig.userSignedChainId)
         }
     }
 }

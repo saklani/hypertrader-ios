@@ -48,21 +48,20 @@ final class AuthViewModel {
 
             // Build approveAgent typed data
             let nonce = HyperliquidSigner.generateNonce()
-            let typedData = HyperliquidSigner.buildApproveAgentTypedData(
+            let typedData = EIP712Builder.approveAgent(
                 agentAddress: agentAddr,
-                nonce: nonce,
-                isTestnet: true
+                nonce: nonce
             )
 
             // Send to wallet for signing via WalletConnect
             let signatureHex = try await wcManager.signTypedData(typedData, wallet: selectedWallet)
 
-            guard let signature = HyperliquidSigner.parseSignature(signatureHex) else {
+            guard let signature = HyperliquidSigner.parse(signature: signatureHex) else {
                 throw HLError.signingFailed("Invalid signature from wallet")
             }
 
             // Post approveAgent to Hyperliquid
-            try await HyperliquidExchangeService.shared.postApproveAgent(
+            try await HyperliquidExchangeService.shared.approveAgent(
                 agentAddress: agentAddr,
                 nonce: nonce,
                 signature: signature

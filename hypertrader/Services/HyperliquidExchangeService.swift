@@ -1,29 +1,38 @@
 import Foundation
 
+enum ExchangeServiceError: LocalizedError {
+    case agentNotApproved
+    case apiError(statusCode: Int, message: String)
+    case invalidResponse
+
+    var errorDescription: String? {
+        switch self {
+        case .agentNotApproved: return "Agent wallet not approved"
+        case .apiError(let code, let msg): return "Exchange error (\(code)): \(msg)"
+        case .invalidResponse: return "Invalid response from exchange"
+        }
+    }
+}
+
 /// Handles Hyperliquid exchange actions (place order, cancel, close position).
 /// Signs locally with the agent wallet key stored in Keychain.
 @MainActor
 final class HyperliquidExchangeService {
     static let shared = HyperliquidExchangeService()
 
-    private let baseURL = URL(string: "https://api.hyperliquid-testnet.xyz/exchange")!
+    private let baseURL = URL(string: HyperliquidConfig.exchangeURL)!
 
     // Builder fee: 3bp (30 tenths of a basis point) sent to your address
     private let builder = HLBuilderWire(b: "0x73bb3A6A37e95BA396ffabA868F912485Bed4B03", f: 30)
 
     // MARK: - Place Order
 
-    func placeOrder(_ input: OrderInput) async throws -> HLExchangeResponse {
-        guard let agentKey = KeychainManager.loadAgentKey() else {
-            throw HLError.agentNotApproved
-        }
+    func place(order input: OrderInput) async throws -> HLExchangeResponse {
+        let agentKey = try loadAgentKey()
 
-        let orderWire = input.toWire()
-        let (signature, nonce) = try HyperliquidSigner.signOrder(
-            orders: [orderWire],
-            builder: builder,
-            agentPrivateKey: agentKey
-        )
+        let orderWire = toWire(input)
+        let orderAction = HLOrderAction(orders: [orderWire], grouping: "na", builder: builder)
+        let (signature, nonce) = try await HyperliquidSigner.sign(privateKey: agentKey, action: orderAction)
 
         let action: [String: Any] = [
             "type": "order",
@@ -40,69 +49,59 @@ final class HyperliquidExchangeService {
             "builder": ["b": builder.b, "f": builder.f]
         ]
 
-        return try await postExchange(action: action, nonce: nonce, signature: signature)
+        return try await post(action: action, nonce: nonce, signature: signature)
     }
 
     // MARK: - Cancel Order
 
-    func cancelOrder(assetIndex: Int, orderId: Int) async throws -> HLExchangeResponse {
-        guard let agentKey = KeychainManager.loadAgentKey() else {
-            throw HLError.agentNotApproved
-        }
+    func cancel(assetIndex: Int, orderId: Int) async throws -> HLExchangeResponse {
+        let agentKey = try loadAgentKey()
 
         let cancel = HLCancelWire(a: assetIndex, o: orderId)
-        let (signature, nonce) = try HyperliquidSigner.signCancel(
-            cancels: [cancel],
-            agentPrivateKey: agentKey
-        )
+        let cancelAction = HLCancelAction(cancels: [cancel])
+        let (signature, nonce) = try await HyperliquidSigner.sign(privateKey: agentKey, action: cancelAction)
 
         let action: [String: Any] = [
             "type": "cancel",
             "cancels": [["a": assetIndex, "o": orderId]]
         ]
 
-        return try await postExchange(action: action, nonce: nonce, signature: signature)
+        return try await post(action: action, nonce: nonce, signature: signature)
     }
 
     // MARK: - Close Position
 
-    func closePosition(
+    func close(
         position: HLPosition,
         assetIndex: Int,
-        currentMidPrice: Double
+        currentMidPrice: Double,
+        slippage: Double = 0.01
     ) async throws -> HLExchangeResponse {
-        let size = position.absSize
-        let isClosingLong = position.isLong
-
-        // 1% slippage for IOC fill
-        let slippageMultiplier = isClosingLong ? 0.99 : 1.01
-        let slippagePrice = currentMidPrice * slippageMultiplier
-
         let input = OrderInput(
             asset: HLAsset(name: position.coin, szDecimals: 4, maxLeverage: 50, onlyIsolated: nil, isDelisted: nil),
             assetIndex: assetIndex,
-            isBuy: !isClosingLong,
-            size: formatPrice(String(size)),
-            price: formatPrice(String(format: "%.2f", slippagePrice)),
+            isBuy: !position.isLong,
+            size: formatPrice(String(position.absSize)),
+            price: currentMidPrice,
+            slippage: slippage,
             isMarket: true,
             reduceOnly: true
         )
 
-        return try await placeOrder(input)
+        return try await place(order: input)
     }
 
     // MARK: - Approve Agent (one-time, signed by master wallet)
 
-    /// Post the approveAgent action after the master wallet signs it via WalletConnect.
-    func postApproveAgent(
+    func approveAgent(
         agentAddress: String,
         nonce: UInt64,
         signature: HLSignature
     ) async throws {
         let action: [String: Any] = [
             "type": "approveAgent",
-            "hyperliquidChain": "Testnet",
-            "signatureChainId": "0x66eee",
+            "hyperliquidChain": HyperliquidConfig.chainName,
+            "signatureChainId": HyperliquidConfig.signatureChainId,
             "agentAddress": agentAddress,
             "agentName": "hypertrader",
             "nonce": nonce
@@ -130,13 +129,20 @@ final class HyperliquidExchangeService {
               (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let msg = String(data: data, encoding: .utf8) ?? "unknown"
-            throw HLError.apiError(statusCode: statusCode, message: msg)
+            throw ExchangeServiceError.apiError(statusCode: statusCode, message: msg)
         }
     }
 
     // MARK: - Private
 
-    private func postExchange(
+    private func loadAgentKey() throws -> Data {
+        guard let key = KeychainManager.loadAgentKey() else {
+            throw ExchangeServiceError.agentNotApproved
+        }
+        return key
+    }
+
+    private func post(
         action: [String: Any],
         nonce: UInt64,
         signature: HLSignature
@@ -164,13 +170,29 @@ final class HyperliquidExchangeService {
               (200...299).contains(httpResponse.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
             let msg = String(data: data, encoding: .utf8) ?? "unknown"
-            throw HLError.apiError(statusCode: statusCode, message: msg)
+            throw ExchangeServiceError.apiError(statusCode: statusCode, message: msg)
         }
 
         return try JSONDecoder().decode(HLExchangeResponse.self, from: data)
     }
 
-    private func encodeOrderType(_ t: HLOrderTypeWire) -> [String: Any] {
+    func toWire(_ input: OrderInput) -> HLOrderWire {
+        let orderType: HLOrderTypeWire = input.isMarket
+            ? HLOrderTypeWire(limit: HLLimitWire(tif: "Ioc"))
+            : HLOrderTypeWire(limit: HLLimitWire(tif: "Gtc"))
+
+        return HLOrderWire(
+            a: input.assetIndex,
+            b: input.isBuy,
+            p: formatPrice(String(input.effectivePrice)),
+            s: formatPrice(input.size),
+            r: input.reduceOnly,
+            t: orderType,
+            c: nil
+        )
+    }
+
+    func encodeOrderType(_ t: HLOrderTypeWire) -> [String: Any] {
         if let limit = t.limit {
             return ["limit": ["tif": limit.tif]]
         } else if let trigger = t.trigger {

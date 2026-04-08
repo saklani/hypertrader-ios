@@ -105,8 +105,8 @@ struct SettingsView: View {
 
     private var networkSection: some View {
         Section("Network") {
-            MetricRow(label: "Network", value: "Testnet")
-            MetricRow(label: "RPC", value: "hyperliquid-testnet.xyz")
+            MetricRow(label: "Network", value: HyperliquidConfig.chainName)
+            MetricRow(label: "RPC", value: HyperliquidConfig.infoURL)
         }
     }
 

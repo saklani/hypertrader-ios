@@ -33,7 +33,7 @@ final class HyperliquidWebSocketService {
     private var subscribedCandleInterval: String?
 
     private init() {
-        wsURL = URL(string: "wss://api.hyperliquid.xyz/ws")!
+        wsURL = URL(string: HyperliquidConfig.wsURL)!
     }
 
     // MARK: - Connect
@@ -131,10 +131,11 @@ final class HyperliquidWebSocketService {
                 }
             }
             if !Task.isCancelled {
+                let service = self
                 await MainActor.run {
-                    self?.webSocket = nil
-                    self?.isConnected = false
-                    self?.scheduleReconnect()
+                    service?.webSocket = nil
+                    service?.isConnected = false
+                    service?.scheduleReconnect()
                 }
             }
         }

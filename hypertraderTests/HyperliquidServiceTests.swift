@@ -269,15 +269,12 @@ struct WebSocketMessageTests {
     }
 
     @Test func decodesHeterogeneousArray() throws {
-        let json = """
-        [{"universe":[{"szDecimals":2,"name":"SOL","maxLeverage":10}]},\
-        [{"funding":"0.0001","openInterest":"100","prevDayPx":"80","dayNtlVlm":"500","markPx":"81","midPx":"80.5","oraclePx":"80.2"}]]
-        """
+        let json = #"[{"universe":[{"szDecimals":2,"name":"SOL","maxLeverage":10}]},[{"funding":"0.0001","openInterest":"100","prevDayPx":"80","dayNtlVlm":"500","markPx":"81","midPx":"80.5","oraclePx":"80.2"}]]"#
         let result = try JSONDecoder().decode(HLMetaAndAssetCtxs.self, from: json.data(using: .utf8)!)
         #expect(result.meta.universe.count == 1)
         #expect(result.meta.universe[0].name == "SOL")
         #expect(result.assetCtxs.count == 1)
-        #expect(result.assetCtxs[0].funding == "0.0001")
+        #expect(result.assetCtxs[0].funding == Optional("0.0001"))
     }
 
     @Test func handlesNullMidPx() throws {

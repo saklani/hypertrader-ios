@@ -71,13 +71,13 @@ struct CandlestickChartView: View {
                     .font(.caption2.monospaced())
             }
         }
-        .frame(height: UIScreen.main.bounds.height * 0.5)
+        .containerRelativeFrame(.vertical) { height, _ in height * 0.5 }
     }
 
     private var emptyState: some View {
         Rectangle()
             .fill(Color(.systemGray6))
-            .frame(height: UIScreen.main.bounds.height * 0.5)
+            .containerRelativeFrame(.vertical) { height, _ in height * 0.5 }
             .overlay {
                 ProgressView("Loading chart...")
                     .font(.caption)
@@ -113,10 +113,10 @@ struct CandlestickChartView: View {
         return endOfDomain.addingTimeInterval(-visibleSeconds)
     }
 
-    /// Body width in points. Screen width / visible candles, minus gap.
+    /// Body width in points. Approximate chart width / visible candles, minus gap.
     private var bodyWidth: CGFloat {
-        let screenWidth = UIScreen.main.bounds.width - 60 // chart plot area minus axis/padding
-        let candleSlot = screenWidth / CGFloat(visibleCandleCount)
+        let chartWidth: CGFloat = 330 // approximate plot area on most iPhones
+        let candleSlot = chartWidth / CGFloat(visibleCandleCount)
         return max(3, candleSlot - 3)
     }
 

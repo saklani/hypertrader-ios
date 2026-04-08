@@ -4,16 +4,8 @@ import Foundation
 final class HyperliquidInfoService {
     static let shared = HyperliquidInfoService()
 
-    private let baseURL: URL
-    private let session: URLSession
-
-    init(isTestnet: Bool = false) {
-        let urlString = isTestnet
-            ? "https://api.hyperliquid-testnet.xyz"
-            : "https://api.hyperliquid.xyz"
-        self.baseURL = URL(string: urlString)!
-        self.session = URLSession.shared
-    }
+    private let baseURL = URL(string: HyperliquidConfig.infoURL)!
+    private let session = URLSession.shared
 
     // MARK: - Public API
 
@@ -122,7 +114,7 @@ final class HyperliquidInfoService {
 
 // MARK: - Errors
 
-enum HLError: LocalizedError {
+nonisolated enum HLError: LocalizedError {
     case apiError(statusCode: Int, message: String)
     case signingFailed(String)
     case walletNotConnected

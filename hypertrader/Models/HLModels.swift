@@ -97,37 +97,6 @@ struct HLMetaAndAssetCtxs: Decodable {
     }
 }
 
-/// Asset paired with its 24h volume and previous day price, for display in the asset picker and markets.
-struct AssetWithVolume: Identifiable, Hashable {
-    let asset: HLAsset
-    let dayNtlVlm: Double
-    let prevDayPx: Double
-    var id: String { asset.name }
-}
-
-// MARK: - Market Filter
-
-enum MarketFilter: String, CaseIterable {
-    case all = "All"
-    case perps = "Perps"
-    case spot = "Spot"
-    case crypto = "Crypto"
-    case tradFi = "TradFi"
-    case hip3 = "HIP-3"
-}
-
-/// Unified market item combining perps and spot data for the Markets tab.
-struct MarketItem: Identifiable, Hashable {
-    let name: String
-    let rawName: String
-    let dayNtlVlm: Double
-    let prevDayPx: Double
-    let isSpot: Bool
-    let isBuilderPerp: Bool
-    let category: String?
-    var id: String { rawName }
-}
-
 // MARK: - Spot Models
 
 /// Response from `spotMetaAndAssetCtxs` — heterogeneous JSON array: [HLSpotMeta, [HLSpotAssetCtx]]
@@ -183,7 +152,7 @@ struct HLPerpDex: Codable {
 // MARK: - Candle (OHLCV)
 
 /// OHLCV candle. API returns price fields as strings.
-struct HLCandle: Codable, Identifiable, Sendable {
+nonisolated struct HLCandle: Codable, Identifiable, Sendable {
     let t: UInt64   // open time (ms)
     let T: UInt64   // close time (ms)
     let s: String   // coin symbol
@@ -240,17 +209,32 @@ struct HLFill: Codable, Identifiable {
 
 // MARK: - Order Wire Format (for MessagePack encoding)
 
-struct HLOrderWire: Codable, Sendable {
+nonisolated struct HLOrderWire: Codable, Sendable {
     let a: Int       // asset index
     let b: Bool      // isBuy
     let p: String    // price (no trailing zeros)
     let s: String    // size (no trailing zeros)
     let r: Bool      // reduceOnly
     let t: HLOrderTypeWire
-    let c: String?   // optional cloid
+    let c: String?   // optional cloid — always encoded (nil = msgpack nil), required by HL wire format
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(a, forKey: .a)
+        try container.encode(b, forKey: .b)
+        try container.encode(p, forKey: .p)
+        try container.encode(s, forKey: .s)
+        try container.encode(r, forKey: .r)
+        try container.encode(t, forKey: .t)
+        if let c {
+            try container.encode(c, forKey: .c)
+        } else {
+            try container.encodeNil(forKey: .c)
+        }
+    }
 }
 
-struct HLOrderTypeWire: Codable, Sendable {
+nonisolated struct HLOrderTypeWire: Codable, Sendable {
     let limit: HLLimitWire?
     let trigger: HLTriggerWire?
 
@@ -265,11 +249,11 @@ struct HLOrderTypeWire: Codable, Sendable {
     }
 }
 
-struct HLLimitWire: Codable, Sendable {
+nonisolated struct HLLimitWire: Codable, Sendable {
     let tif: String // "Gtc", "Ioc", "Alo"
 }
 
-struct HLTriggerWire: Codable, Sendable {
+nonisolated struct HLTriggerWire: Codable, Sendable {
     let isMarket: Bool
     let triggerPx: String
     let tpsl: String // "tp" or "sl"
@@ -277,26 +261,26 @@ struct HLTriggerWire: Codable, Sendable {
 
 // MARK: - Builder Fee
 
-struct HLBuilderWire: Codable, Sendable {
+nonisolated struct HLBuilderWire: Codable, Sendable {
     let b: String   // builder address
     let f: Int      // fee rate in tenths of a basis point (10 = 1bp = 0.01%)
 }
 
 // MARK: - Actions (for MessagePack encoding)
 
-struct HLOrderAction: Codable, Sendable {
+nonisolated struct HLOrderAction: Codable, Sendable {
     var type: String = "order"
     let orders: [HLOrderWire]
     let grouping: String // "na", "normalTpsl", "positionTpsl"
     let builder: HLBuilderWire?
 }
 
-struct HLCancelAction: Codable, Sendable {
+nonisolated struct HLCancelAction: Codable, Sendable {
     var type: String = "cancel"
     let cancels: [HLCancelWire]
 }
 
-struct HLCancelWire: Codable, Sendable {
+nonisolated struct HLCancelWire: Codable, Sendable {
     let a: Int // asset index
     let o: Int // order id
 }
@@ -351,55 +335,3 @@ struct HLOpenOrder: Codable, Identifiable {
     var id: Int { oid }
 }
 
-// MARK: - Order Input (app-facing)
-
-struct OrderInput {
-    let asset: HLAsset
-    let assetIndex: Int
-    let isBuy: Bool
-    let size: String
-    let price: String
-    let isMarket: Bool
-    let reduceOnly: Bool
-
-    func toWire(slippagePrice: String? = nil) -> HLOrderWire {
-        let effectivePrice = isMarket ? (slippagePrice ?? price) : price
-        let orderType: HLOrderTypeWire = isMarket
-            ? HLOrderTypeWire(limit: HLLimitWire(tif: "Ioc"))
-            : HLOrderTypeWire(limit: HLLimitWire(tif: "Gtc"))
-
-        return HLOrderWire(
-            a: assetIndex,
-            b: isBuy,
-            p: formatPrice(effectivePrice),
-            s: formatPrice(size),
-            r: reduceOnly,
-            t: orderType,
-            c: nil
-        )
-    }
-}
-
-// MARK: - Helpers
-
-/// Remove trailing zeros from a decimal string (Hyperliquid wire format requirement)
-func formatPrice(_ value: String) -> String {
-    guard let decimal = Decimal(string: value) else { return value }
-    let formatted = NSDecimalNumber(decimal: decimal).stringValue
-    return formatted
-}
-
-/// Format a price for display, matching Hyperliquid UI precision.
-/// >= 10000 → integer, >= 100 → 2 decimals, >= 1 → 4 decimals, < 1 → 6 decimals
-func formatDisplayPrice(_ price: Double) -> String {
-    if price >= 10000 { return String(format: "%.0f", price) }
-    if price >= 100 { return String(format: "%.2f", price) }
-    if price >= 1 { return String(format: "%.4f", price) }
-    return String(format: "%.6f", price)
-}
-
-/// Format a price string for display (parses then formats).
-func formatDisplayPrice(_ price: String) -> String {
-    guard let d = Double(price) else { return price }
-    return formatDisplayPrice(d)
-}

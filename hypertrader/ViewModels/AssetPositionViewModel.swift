@@ -30,7 +30,7 @@ final class AssetPositionViewModel {
 
         isClosing = true
         do {
-            let response = try await exchangeService.closePosition(
+            let response = try await exchangeService.close(
                 position: position.position,
                 assetIndex: assetIndex,
                 currentMidPrice: midPrice

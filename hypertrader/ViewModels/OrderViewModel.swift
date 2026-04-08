@@ -8,6 +8,7 @@ final class OrderViewModel {
     var isMarketOrder = true
     var sizeText = ""
     var priceText = ""
+    var slippage = 0.01 // 1% default
     var isPlacingOrder = false
     var orderResult: String?
     var orderError: String?
@@ -29,18 +30,19 @@ final class OrderViewModel {
     // MARK: - Place Order
 
     func placeOrder(asset: HLAsset, assetIndex: Int) async {
-        let midPrice = wsService.mids[asset.name].flatMap(Double.init)
-
-        let price: String
+        let price: Double
         if isMarketOrder {
-            guard let mid = midPrice else {
+            guard let mid = wsService.mids[asset.name].flatMap(Double.init) else {
                 orderError = "No market price available"
                 return
             }
-            let slippagePrice = isBuy ? mid * 1.01 : mid * 0.99
-            price = String(format: "%.2f", slippagePrice)
+            price = mid
         } else {
-            price = priceText
+            guard let limitPrice = Double(priceText) else {
+                orderError = "Invalid price"
+                return
+            }
+            price = limitPrice
         }
 
         let input = OrderInput(
@@ -49,6 +51,7 @@ final class OrderViewModel {
             isBuy: isBuy,
             size: sizeText,
             price: price,
+            slippage: slippage,
             isMarket: isMarketOrder,
             reduceOnly: false
         )
@@ -58,7 +61,7 @@ final class OrderViewModel {
         orderError = nil
 
         do {
-            let response = try await exchangeService.placeOrder(input)
+            let response = try await exchangeService.place(order: input)
             if response.status == "ok" {
                 orderResult = "Order placed successfully"
                 sizeText = ""

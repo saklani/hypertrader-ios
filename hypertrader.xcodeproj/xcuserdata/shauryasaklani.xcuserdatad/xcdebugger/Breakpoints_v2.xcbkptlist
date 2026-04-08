@@ -8,7 +8,7 @@
          BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
          <BreakpointContent
             uuid = "B889D03D-8D12-432D-8BAC-E30F588F5A34"
-            shouldBeEnabled = "Yes"
+            shouldBeEnabled = "No"
             ignoreCount = "0"
             continueAfterRunningActions = "No"
             filePath = "hypertraderTests/HyperliquidServiceTests.swift"
@@ -16,7 +16,7 @@
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "278"
             endingLineNumber = "278"
-            landmarkName = "decodesOptionalFields()"
+            landmarkName = "decodesHeterogeneousArray()"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>

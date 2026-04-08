@@ -2,52 +2,52 @@ import Foundation
 
 /// Minimal MessagePack encoder for Codable structs.
 /// Supports: String, Int, Bool, nil, nested maps, arrays.
-final class MsgPackEncoder {
+nonisolated final class MessagePackEncoder {
 
     /// Encode a Codable value to MessagePack bytes
     func encode<T: Encodable>(_ value: T) throws -> Data {
-        let impl = MsgPackEncoderImpl()
+        let impl = MessagePackEncoderImpl()
         try value.encode(to: impl)
         guard let result = impl.data else {
-            throw MsgPackError.encodingFailed
+            throw MessagePackError.encodingFailed
         }
         return result
     }
 }
 
-enum MsgPackError: Error {
+nonisolated enum MessagePackError: Error {
     case encodingFailed
 }
 
 // MARK: - Encoder Implementation
 
-private class MsgPackEncoderImpl: Encoder {
+private class MessagePackEncoderImpl: Encoder {
     var codingPath: [CodingKey] = []
     var userInfo: [CodingUserInfoKey: Any] = [:]
     var data: Data?
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-        let container = MsgPackKeyedContainer<Key>(encoder: self, codingPath: codingPath)
+        let container = MessagePackKeyedContainer<Key>(encoder: self, codingPath: codingPath)
         return KeyedEncodingContainer(container)
     }
 
     func unkeyedContainer() -> UnkeyedEncodingContainer {
-        MsgPackUnkeyedContainer(encoder: self, codingPath: codingPath)
+        MessagePackUnkeyedContainer(encoder: self, codingPath: codingPath)
     }
 
     func singleValueContainer() -> SingleValueEncodingContainer {
-        MsgPackSingleValueContainer(encoder: self, codingPath: codingPath)
+        MessagePackSingleValueContainer(encoder: self, codingPath: codingPath)
     }
 }
 
 // MARK: - Keyed Container (maps/structs)
 
-private class MsgPackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
+private class MessagePackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
     var codingPath: [CodingKey]
-    let encoder: MsgPackEncoderImpl
+    let encoder: MessagePackEncoderImpl
     var entries: [(String, Data)] = []
 
-    init(encoder: MsgPackEncoderImpl, codingPath: [CodingKey]) {
+    init(encoder: MessagePackEncoderImpl, codingPath: [CodingKey]) {
         self.encoder = encoder
         self.codingPath = codingPath
     }
@@ -61,37 +61,37 @@ private class MsgPackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProto
     }
 
     func encode(_ value: String, forKey key: Key) throws {
-        entries.append((key.stringValue, MsgPack.encodeString(value)))
+        entries.append((key.stringValue, MessagePack.encodeString(value)))
     }
 
     func encode(_ value: Int, forKey key: Key) throws {
-        entries.append((key.stringValue, MsgPack.encodeInt(Int64(value))))
+        entries.append((key.stringValue, MessagePack.encodeInt(Int64(value))))
     }
 
     func encode(_ value: Int8, forKey key: Key) throws { try encode(Int(value), forKey: key) }
     func encode(_ value: Int16, forKey key: Key) throws { try encode(Int(value), forKey: key) }
     func encode(_ value: Int32, forKey key: Key) throws { try encode(Int(value), forKey: key) }
     func encode(_ value: Int64, forKey key: Key) throws {
-        entries.append((key.stringValue, MsgPack.encodeInt(value)))
+        entries.append((key.stringValue, MessagePack.encodeInt(value)))
     }
 
     func encode(_ value: UInt, forKey key: Key) throws {
-        entries.append((key.stringValue, MsgPack.encodeUInt(UInt64(value))))
+        entries.append((key.stringValue, MessagePack.encodeUInt(UInt64(value))))
     }
     func encode(_ value: UInt8, forKey key: Key) throws { try encode(UInt(value), forKey: key) }
     func encode(_ value: UInt16, forKey key: Key) throws { try encode(UInt(value), forKey: key) }
     func encode(_ value: UInt32, forKey key: Key) throws { try encode(UInt(value), forKey: key) }
     func encode(_ value: UInt64, forKey key: Key) throws {
-        entries.append((key.stringValue, MsgPack.encodeUInt(value)))
+        entries.append((key.stringValue, MessagePack.encodeUInt(value)))
     }
 
     func encode(_ value: Float, forKey key: Key) throws { try encode(Double(value), forKey: key) }
     func encode(_ value: Double, forKey key: Key) throws {
-        entries.append((key.stringValue, MsgPack.encodeDouble(value)))
+        entries.append((key.stringValue, MessagePack.encodeDouble(value)))
     }
 
     func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
-        let sub = MsgPackEncoderImpl()
+        let sub = MessagePackEncoderImpl()
         sub.codingPath = codingPath + [key]
         try value.encode(to: sub)
         if let data = sub.data {
@@ -99,76 +99,16 @@ private class MsgPackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProto
         }
     }
 
-    // Override all encodeIfPresent variants so nil optionals encode as msgpack nil, not skipped.
-    // Swift has separate default implementations per type that just skip nil.
-    func encodeIfPresent(_ value: Bool?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: String?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: Int?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: Int8?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: Int16?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: Int32?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: Int64?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: UInt?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: UInt8?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: UInt16?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: UInt32?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: UInt64?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: Float?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent(_ value: Double?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
-    func encodeIfPresent<T: Encodable>(_ value: T?, forKey key: Key) throws {
-        guard let value else { return try encodeNil(forKey: key) }
-        try encode(value, forKey: key)
-    }
+    // nil optionals are skipped (key omitted entirely) — matches Python SDK behavior.
+    // Swift's default encodeIfPresent implementations handle this automatically.
 
     func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type, forKey key: Key) -> KeyedEncodingContainer<NestedKey> {
-        let container = MsgPackKeyedContainer<NestedKey>(encoder: encoder, codingPath: codingPath + [key])
+        let container = MessagePackKeyedContainer<NestedKey>(encoder: encoder, codingPath: codingPath + [key])
         return KeyedEncodingContainer(container)
     }
 
     func nestedUnkeyedContainer(forKey key: Key) -> UnkeyedEncodingContainer {
-        MsgPackUnkeyedContainer(encoder: encoder, codingPath: codingPath + [key])
+        MessagePackUnkeyedContainer(encoder: encoder, codingPath: codingPath + [key])
     }
 
     func superEncoder() -> Encoder { encoder }
@@ -176,9 +116,9 @@ private class MsgPackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProto
 
     deinit {
         // Finalize: write map header + entries
-        var result = MsgPack.encodeMapHeader(entries.count)
+        var result = MessagePack.encodeMapHeader(entries.count)
         for (key, value) in entries {
-            result.append(MsgPack.encodeString(key))
+            result.append(MessagePack.encodeString(key))
             result.append(value)
         }
         encoder.data = result
@@ -187,52 +127,52 @@ private class MsgPackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProto
 
 // MARK: - Unkeyed Container (arrays)
 
-private class MsgPackUnkeyedContainer: UnkeyedEncodingContainer {
+private class MessagePackUnkeyedContainer: UnkeyedEncodingContainer {
     var codingPath: [CodingKey]
     var count = 0
-    let encoder: MsgPackEncoderImpl
+    let encoder: MessagePackEncoderImpl
     var items: [Data] = []
 
-    init(encoder: MsgPackEncoderImpl, codingPath: [CodingKey]) {
+    init(encoder: MessagePackEncoderImpl, codingPath: [CodingKey]) {
         self.encoder = encoder
         self.codingPath = codingPath
     }
 
     func encodeNil() throws { items.append(Data([0xc0])); count += 1 }
     func encode(_ value: Bool) throws { items.append(Data([value ? 0xc3 : 0xc2])); count += 1 }
-    func encode(_ value: String) throws { items.append(MsgPack.encodeString(value)); count += 1 }
-    func encode(_ value: Int) throws { items.append(MsgPack.encodeInt(Int64(value))); count += 1 }
+    func encode(_ value: String) throws { items.append(MessagePack.encodeString(value)); count += 1 }
+    func encode(_ value: Int) throws { items.append(MessagePack.encodeInt(Int64(value))); count += 1 }
     func encode(_ value: Int8) throws { try encode(Int(value)) }
     func encode(_ value: Int16) throws { try encode(Int(value)) }
     func encode(_ value: Int32) throws { try encode(Int(value)) }
-    func encode(_ value: Int64) throws { items.append(MsgPack.encodeInt(value)); count += 1 }
-    func encode(_ value: UInt) throws { items.append(MsgPack.encodeUInt(UInt64(value))); count += 1 }
+    func encode(_ value: Int64) throws { items.append(MessagePack.encodeInt(value)); count += 1 }
+    func encode(_ value: UInt) throws { items.append(MessagePack.encodeUInt(UInt64(value))); count += 1 }
     func encode(_ value: UInt8) throws { try encode(UInt(value)) }
     func encode(_ value: UInt16) throws { try encode(UInt(value)) }
     func encode(_ value: UInt32) throws { try encode(UInt(value)) }
-    func encode(_ value: UInt64) throws { items.append(MsgPack.encodeUInt(value)); count += 1 }
+    func encode(_ value: UInt64) throws { items.append(MessagePack.encodeUInt(value)); count += 1 }
     func encode(_ value: Float) throws { try encode(Double(value)) }
-    func encode(_ value: Double) throws { items.append(MsgPack.encodeDouble(value)); count += 1 }
+    func encode(_ value: Double) throws { items.append(MessagePack.encodeDouble(value)); count += 1 }
 
     func encode<T: Encodable>(_ value: T) throws {
-        let sub = MsgPackEncoderImpl()
+        let sub = MessagePackEncoderImpl()
         try value.encode(to: sub)
         if let data = sub.data { items.append(data) }
         count += 1
     }
 
     func nestedContainer<NestedKey: CodingKey>(keyedBy keyType: NestedKey.Type) -> KeyedEncodingContainer<NestedKey> {
-        KeyedEncodingContainer(MsgPackKeyedContainer<NestedKey>(encoder: encoder, codingPath: codingPath))
+        KeyedEncodingContainer(MessagePackKeyedContainer<NestedKey>(encoder: encoder, codingPath: codingPath))
     }
 
     func nestedUnkeyedContainer() -> UnkeyedEncodingContainer {
-        MsgPackUnkeyedContainer(encoder: encoder, codingPath: codingPath)
+        MessagePackUnkeyedContainer(encoder: encoder, codingPath: codingPath)
     }
 
     func superEncoder() -> Encoder { encoder }
 
     deinit {
-        var result = MsgPack.encodeArrayHeader(count)
+        var result = MessagePack.encodeArrayHeader(count)
         for item in items { result.append(item) }
         encoder.data = result
     }
@@ -240,33 +180,33 @@ private class MsgPackUnkeyedContainer: UnkeyedEncodingContainer {
 
 // MARK: - Single Value Container
 
-private class MsgPackSingleValueContainer: SingleValueEncodingContainer {
+private class MessagePackSingleValueContainer: SingleValueEncodingContainer {
     var codingPath: [CodingKey]
-    let encoder: MsgPackEncoderImpl
+    let encoder: MessagePackEncoderImpl
 
-    init(encoder: MsgPackEncoderImpl, codingPath: [CodingKey]) {
+    init(encoder: MessagePackEncoderImpl, codingPath: [CodingKey]) {
         self.encoder = encoder
         self.codingPath = codingPath
     }
 
     func encodeNil() throws { encoder.data = Data([0xc0]) }
     func encode(_ value: Bool) throws { encoder.data = Data([value ? 0xc3 : 0xc2]) }
-    func encode(_ value: String) throws { encoder.data = MsgPack.encodeString(value) }
-    func encode(_ value: Int) throws { encoder.data = MsgPack.encodeInt(Int64(value)) }
+    func encode(_ value: String) throws { encoder.data = MessagePack.encodeString(value) }
+    func encode(_ value: Int) throws { encoder.data = MessagePack.encodeInt(Int64(value)) }
     func encode(_ value: Int8) throws { try encode(Int(value)) }
     func encode(_ value: Int16) throws { try encode(Int(value)) }
     func encode(_ value: Int32) throws { try encode(Int(value)) }
-    func encode(_ value: Int64) throws { encoder.data = MsgPack.encodeInt(value) }
-    func encode(_ value: UInt) throws { encoder.data = MsgPack.encodeUInt(UInt64(value)) }
+    func encode(_ value: Int64) throws { encoder.data = MessagePack.encodeInt(value) }
+    func encode(_ value: UInt) throws { encoder.data = MessagePack.encodeUInt(UInt64(value)) }
     func encode(_ value: UInt8) throws { try encode(UInt(value)) }
     func encode(_ value: UInt16) throws { try encode(UInt(value)) }
     func encode(_ value: UInt32) throws { try encode(UInt(value)) }
-    func encode(_ value: UInt64) throws { encoder.data = MsgPack.encodeUInt(value) }
+    func encode(_ value: UInt64) throws { encoder.data = MessagePack.encodeUInt(value) }
     func encode(_ value: Float) throws { try encode(Double(value)) }
-    func encode(_ value: Double) throws { encoder.data = MsgPack.encodeDouble(value) }
+    func encode(_ value: Double) throws { encoder.data = MessagePack.encodeDouble(value) }
 
     func encode<T: Encodable>(_ value: T) throws {
-        let sub = MsgPackEncoderImpl()
+        let sub = MessagePackEncoderImpl()
         try value.encode(to: sub)
         encoder.data = sub.data
     }
@@ -274,7 +214,7 @@ private class MsgPackSingleValueContainer: SingleValueEncodingContainer {
 
 // MARK: - Primitive Encoding
 
-private enum MsgPack {
+private enum MessagePack {
 
     static func encodeString(_ str: String) -> Data {
         let bytes = Array(str.utf8)

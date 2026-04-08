@@ -23,7 +23,7 @@ struct EIP712Field: Codable, Equatable {
 
 // MARK: - Hyperliquid Domains
 
-enum HLDomains {
+nonisolated enum HLDomains {
     /// L1 action signing (phantom agent)
     static func exchange() -> [String: AnyJSON] {
         [
@@ -34,22 +34,12 @@ enum HLDomains {
         ]
     }
 
-    /// User signed action (testnet)
-    static func userSignedTestnet() -> [String: AnyJSON] {
+    /// User signed action (approveAgent, etc.)
+    static func userSigned() -> [String: AnyJSON] {
         [
             "name": .string("HyperliquidSignTransaction"),
             "version": .string("1"),
-            "chainId": .int(421614),
-            "verifyingContract": .string("0x0000000000000000000000000000000000000000")
-        ]
-    }
-
-    /// User signed action (mainnet)
-    static func userSignedMainnet() -> [String: AnyJSON] {
-        [
-            "name": .string("HyperliquidSignTransaction"),
-            "version": .string("1"),
-            "chainId": .int(42161),
+            "chainId": .int(HyperliquidConfig.userSignedChainId),
             "verifyingContract": .string("0x0000000000000000000000000000000000000000")
         ]
     }
@@ -57,7 +47,7 @@ enum HLDomains {
 
 // MARK: - EIP-712 Type Definitions
 
-enum HLEIPTypes {
+nonisolated enum HLEIPTypes {
     static let eip712Domain: [EIP712Field] = [
         EIP712Field(name: "name", type: "string"),
         EIP712Field(name: "version", type: "string"),
@@ -80,7 +70,7 @@ enum HLEIPTypes {
 
 // MARK: - Builders
 
-enum EIP712Builder {
+nonisolated enum EIP712Builder {
     /// Phantom agent typed data for L1 action signing
     static func phantomAgent(source: String, connectionId: String) -> EIP712TypedData {
         EIP712TypedData(
@@ -101,8 +91,7 @@ enum EIP712Builder {
     static func approveAgent(
         agentAddress: String,
         agentName: String = "hypertrader",
-        nonce: UInt64,
-        isTestnet: Bool = true
+        nonce: UInt64
     ) -> EIP712TypedData {
         EIP712TypedData(
             types: [
@@ -110,9 +99,9 @@ enum EIP712Builder {
                 "HyperliquidTransaction:ApproveAgent": HLEIPTypes.approveAgent
             ],
             primaryType: "HyperliquidTransaction:ApproveAgent",
-            domain: isTestnet ? HLDomains.userSignedTestnet() : HLDomains.userSignedMainnet(),
+            domain: HLDomains.userSigned(),
             message: [
-                "hyperliquidChain": .string(isTestnet ? "Testnet" : "Mainnet"),
+                "hyperliquidChain": .string(HyperliquidConfig.chainName),
                 "agentAddress": .string(agentAddress),
                 "agentName": .string(agentName),
                 "nonce": .uint64(nonce)
@@ -123,7 +112,7 @@ enum EIP712Builder {
 
 // MARK: - AnyJSON (lightweight JSON value wrapper)
 
-enum AnyJSON: Codable, Equatable {
+nonisolated enum AnyJSON: Codable, Equatable {
     case string(String)
     case int(Int)
     case uint64(UInt64)

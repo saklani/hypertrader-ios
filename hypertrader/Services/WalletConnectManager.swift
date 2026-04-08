@@ -20,7 +20,6 @@ final class WalletConnectManager {
     // MARK: - Initialization
 
     func initialize() {
-        // TODO: Replace with your project ID from cloud.reown.com (free)
         let projectId = "61711db68ae8ac06d236a9a2534dbfee"
 
         wcClient = WCClient(

@@ -7,14 +7,15 @@ enum EthereumSignerError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidLength(let msg): return "Invalid length: \(msg)"
-        case .signingFailed(let msg): return "Signing failed: \(msg)"
+        case .invalidLength(let message): return "Invalid length: \(message)"
+        case .signingFailed(let message): return "Signing failed: \(message)"
         }
     }
 }
 
 /// Low-level Ethereum primitives: key generation, address derivation, secp256k1 ECDSA signing.
-enum EthereumSigner {
+/// All functions are nonisolated — safe to call from any thread. Threading is the caller's concern.
+nonisolated enum EthereumSigner {
 
     // MARK: - secp256k1 Context
 
@@ -87,7 +88,7 @@ enum EthereumSigner {
 // MARK: - Data Hex Extension
 
 extension Data {
-    func toHexString() -> String {
+    nonisolated func toHexString() -> String {
         map { String(format: "%02x", $0) }.joined()
     }
 }
