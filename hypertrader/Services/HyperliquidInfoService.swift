@@ -1,7 +1,7 @@
 import Foundation
 
 /// Read-only Hyperliquid API client. No authentication required.
-final class HyperliquidInfoService {
+nonisolated final class HyperliquidInfoService: Sendable {
     static let shared = HyperliquidInfoService()
 
     private let baseURL = URL(string: HyperliquidConfig.infoURL)!

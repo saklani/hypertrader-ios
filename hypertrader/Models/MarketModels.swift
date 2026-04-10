@@ -1,14 +1,14 @@
 import Foundation
 
 /// Asset paired with its 24h volume and previous day price, for display in the asset picker and markets.
-struct AssetWithVolume: Identifiable, Hashable {
+nonisolated struct AssetWithVolume: Identifiable, Hashable, Sendable {
     let asset: HLAsset
     let dayNtlVlm: Double
     let prevDayPx: Double
     var id: String { asset.name }
 }
 
-enum MarketFilter: String, CaseIterable {
+nonisolated enum MarketFilter: String, CaseIterable, Sendable {
     case all = "All"
     case perps = "Perps"
     case spot = "Spot"
@@ -18,7 +18,7 @@ enum MarketFilter: String, CaseIterable {
 }
 
 /// Unified market item combining perps and spot data for the Markets tab.
-struct MarketItem: Identifiable, Hashable {
+nonisolated struct MarketItem: Identifiable, Hashable, Sendable {
     let name: String
     let rawName: String
     let dayNtlVlm: Double

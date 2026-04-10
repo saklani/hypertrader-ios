@@ -1,22 +1,45 @@
 import SwiftUI
 import Charts
 
+/// Self-contained candlestick chart for a given coin. Owns its own `ChartViewModel`,
+/// embeds `IntervalPickerBar` for interval selection, and reads the live mid price
+/// from `HyperliquidWebSocketService.shared.mids` for the overlay line.
+///
+/// Currently not mounted in `MarketView` — the chart is intentionally hidden.
+/// When you re-enable it, just drop `CandlestickChartView(coin: market.selectedAsset?.name)`
+/// wherever you want it in the layout.
 struct CandlestickChartView: View {
-    let candles: [HLCandle]
-    var interval: String = "1h"
-    var currentPrice: Double? = nil
+    let coin: String?
+
+    @State private var chart = ChartViewModel()
 
     var body: some View {
-        if candles.isEmpty {
-            emptyState
-        } else {
-            chart
+        VStack(spacing: 0) {
+            IntervalPickerBar(
+                intervals: chart.intervals,
+                selected: chart.selectedInterval
+            ) { interval in
+                guard let coin else { return }
+                Task { await chart.changeInterval(interval, coin: coin) }
+            }
+
+            if chart.candles.isEmpty {
+                emptyState
+            } else {
+                chartView
+            }
+        }
+        .task(id: coin) {
+            guard let coin else { return }
+            await chart.load(coin: coin)
         }
     }
 
-    private var chart: some View {
+    // MARK: - Chart
+
+    private var chartView: some View {
         Chart {
-            ForEach(candles) { candle in
+            ForEach(chart.candles) { candle in
                 // Wick
                 RuleMark(
                     x: .value("Time", candle.time),
@@ -42,7 +65,7 @@ struct CandlestickChartView: View {
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
                     .foregroundStyle(Color.accentColor.opacity(0.7))
                     .annotation(position: .trailing, alignment: .leading, spacing: 4) {
-                        Text(formatChartPrice(price))
+                        Text(formatDisplayPrice(price))
                             .font(.caption2.bold().monospaced())
                             .foregroundStyle(.white)
                             .padding(.horizontal, 4)
@@ -84,6 +107,13 @@ struct CandlestickChartView: View {
             }
     }
 
+    // MARK: - Live mid price (from WS singleton)
+
+    private var currentPrice: Double? {
+        guard let coin else { return nil }
+        return HyperliquidWebSocketService.shared.mids[coin].flatMap(Double.init)
+    }
+
     // MARK: - Layout
 
     /// Number of candles visible at once.
@@ -98,15 +128,15 @@ struct CandlestickChartView: View {
 
     /// X-axis domain: from first candle to last candle + 5 candles of padding on the right.
     private var xDomain: ClosedRange<Date> {
-        let first = candles.first?.time ?? Date()
-        let last = candles.last?.time ?? Date()
+        let first = chart.candles.first?.time ?? Date()
+        let last = chart.candles.last?.time ?? Date()
         let rightPadding = Double(rightPaddingCandles * intervalSeconds)
         return first...last.addingTimeInterval(rightPadding)
     }
 
     /// Start scrolled to the end (most recent candles + padding visible).
     private var initialScrollPosition: Date {
-        let last = candles.last?.time ?? Date()
+        let last = chart.candles.last?.time ?? Date()
         let rightPadding = Double(rightPaddingCandles * intervalSeconds)
         let endOfDomain = last.addingTimeInterval(rightPadding)
         let visibleSeconds = Double(visibleDomainSeconds)
@@ -121,7 +151,7 @@ struct CandlestickChartView: View {
     }
 
     private var intervalSeconds: Int {
-        switch interval {
+        switch chart.selectedInterval {
         case "1m": return 60
         case "5m": return 300
         case "15m": return 900
@@ -134,7 +164,7 @@ struct CandlestickChartView: View {
 
     /// X-axis label format adapts to interval.
     private var xAxisFormat: Date.FormatStyle {
-        switch interval {
+        switch chart.selectedInterval {
         case "1d": return .dateTime.month(.abbreviated).day()
         case "4h": return .dateTime.day().hour()
         default: return .dateTime.hour().minute()
@@ -142,75 +172,17 @@ struct CandlestickChartView: View {
     }
 
     private var yDomain: ClosedRange<Double> {
-        let lows = candles.map(\.low)
-        let highs = candles.map(\.high)
+        let lows = chart.candles.map(\.low)
+        let highs = chart.candles.map(\.high)
         guard let minLow = lows.min(), let maxHigh = highs.max(), maxHigh > minLow else {
             return 0...1
         }
         let padding = (maxHigh - minLow) * 0.05
         return (minLow - padding)...(maxHigh + padding)
     }
-
-    private func formatChartPrice(_ price: Double) -> String {
-        formatDisplayPrice(price)
-    }
 }
 
-// MARK: - Mock Data Helper
-
-private func mockCandles(count: Int = 200, interval: String = "1h", basePrice: Double = 95000) -> [HLCandle] {
-    let now = Date()
-    let intervalSeconds: Double = switch interval {
-    case "1m": 60
-    case "5m": 300
-    case "15m": 900
-    case "4h": 14400
-    case "1d": 86400
-    default: 3600
-    }
-
-    var price = basePrice
-    return (0..<count).map { i in
-        price += Double.random(in: -200...200)
-        let open = price
-        let close = price + Double.random(in: -150...150)
-        let high = max(open, close) + Double.random(in: 10...100)
-        let low = min(open, close) - Double.random(in: 10...100)
-        price = close
-        let time = UInt64(now.addingTimeInterval(Double(i - count) * intervalSeconds).timeIntervalSince1970 * 1000)
-        return HLCandle(
-            t: time, T: time + UInt64(intervalSeconds * 1000),
-            s: "BTC", i: interval,
-            o: String(format: "%.2f", open), c: String(format: "%.2f", close),
-            h: String(format: "%.2f", high), l: String(format: "%.2f", low),
-            v: "12.5", n: 100
-        )
-    }
-}
-
-// MARK: - Previews
-
-#Preview("1h - 200 candles (scrollable)") {
-    CandlestickChartView(candles: mockCandles(count: 200, interval: "1h"), interval: "1h")
-        .padding()
-}
-
-#Preview("1m - 200 candles") {
-    CandlestickChartView(candles: mockCandles(count: 200, interval: "1m"), interval: "1m")
-        .padding()
-}
-
-#Preview("1d - 100 candles") {
-    CandlestickChartView(candles: mockCandles(count: 100, interval: "1d", basePrice: 60000), interval: "1d")
-        .padding()
-}
-
-#Preview("Few candles") {
-    CandlestickChartView(candles: mockCandles(count: 10, interval: "1h"), interval: "1h")
-        .padding()
-}
-
-#Preview("Empty") {
-    CandlestickChartView(candles: [])
+#Preview {
+    CandlestickChartView(coin: "BTC")
         .padding()
 }

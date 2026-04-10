@@ -68,6 +68,10 @@ final class AuthViewModel {
             )
 
             isAgentApproved = true
+            // Publish the change to the observable singleton so every view
+            // reading `WalletConnectManager.shared.isAgentReady` re-renders,
+            // regardless of which AuthViewModel instance owned this flow.
+            wcManager.isAgentReady = true
         } catch {
             setupError = error.localizedDescription
         }

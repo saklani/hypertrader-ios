@@ -2,8 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @State private var authVM = AuthViewModel()
-    @State private var showCopyURI = false
-    @State private var copiedURI = false
+    @State private var showLoginSheet = false
 
     var body: some View {
         NavigationStack {
@@ -13,8 +12,8 @@ struct SettingsView: View {
                 aboutSection
             }
             .navigationTitle("Settings")
-            .sheet(isPresented: $showCopyURI) {
-                copyURISheet
+            .sheet(isPresented: $showLoginSheet) {
+                LoginView(authVM: authVM)
             }
         }
     }
@@ -61,38 +60,13 @@ struct SettingsView: View {
                 Text("No wallet connected")
                     .foregroundStyle(.secondary)
 
-                ForEach(WalletApp.allCases) { wallet in
-                    Button {
-                        authVM.selectedWallet = wallet
-                        Task { await authVM.connectWallet() }
-                    } label: {
-                        HStack {
-                            Image(systemName: wallet.iconName)
-                                .frame(width: 24)
-                            Text(wallet.displayName)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
-                if authVM.wcManager.isLoading {
-                    HStack {
-                        Spacer()
-                        ProgressView("Connecting...")
-                        Spacer()
-                    }
-                }
-
                 Button {
-                    Task { await authVM.generateURI() }
-                    showCopyURI = true
+                    showLoginSheet = true
                 } label: {
-                    Text("Having trouble?")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text("Connect Wallet")
                 }
+                .buttonStyle(PrimaryButtonStyle(color: .blue))
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
 
             if let error = authVM.wcManager.error ?? authVM.setupError {
@@ -116,47 +90,6 @@ struct SettingsView: View {
         Section("About") {
             MetricRow(label: "Version", value: "1.0")
             MetricRow(label: "Build", value: "1")
-        }
-    }
-
-    // MARK: - Copy URI Sheet
-
-    private var copyURISheet: some View {
-        VStack(spacing: 20) {
-            SheetHeader(title: "WalletConnect URI")
-
-            if let uri = authVM.pendingURI {
-                Text(uri)
-                    .font(.caption2.monospaced())
-                    .lineLimit(4)
-                    .surfaceCard()
-
-                Button {
-                    UIPasteboard.general.string = uri
-                    copiedURI = true
-                    Task { await authVM.waitForSession() }
-                } label: {
-                    HStack {
-                        Image(systemName: copiedURI ? "checkmark" : "doc.on.doc")
-                        Text(copiedURI ? "Copied" : "Copy to Clipboard")
-                    }
-                }
-                .buttonStyle(PrimaryButtonStyle(color: copiedURI ? .green : .blue))
-
-                Text("Paste this URI into your wallet app\nto connect.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            } else {
-                ProgressView("Generating URI...")
-            }
-
-            Spacer()
-        }
-        .padding()
-        .presentationDetents([.medium])
-        .onDisappear {
-            copiedURI = false
         }
     }
 }

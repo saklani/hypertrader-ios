@@ -2,16 +2,28 @@ import Foundation
 import UIKit
 import CryptoKit
 
+// MARK: - Debug Logging
+
+/// `nonisolated` so it can be called synchronously from the `WalletConnectClient` actor and from
+/// any background task without hopping to the main actor. The project uses `@MainActor`
+/// as default isolation, which would otherwise implicitly isolate this free function.
+@inline(__always)
+nonisolated fileprivate func wcLog(_ message: @autoclosure () -> String) {
+    #if DEBUG
+    print("[WC] \(message())")
+    #endif
+}
+
 // MARK: - Minimal WalletConnect v2 Protocol Client
 
 /// A lightweight WalletConnect v2 dApp client using only CryptoKit and URLSession.
 /// Supports: pairing, session proposal, eth_signTypedData_v4 requests.
-actor WCClient {
+actor WalletConnectClient {
 
     // MARK: - Configuration
 
     private let projectId: String
-    private let metadata: WCAppMetadata
+    private let metadata: WalletConnectAppMetadata
 
     // MARK: - Relay
 
@@ -21,16 +33,17 @@ actor WCClient {
 
     // MARK: - Pairing
 
-    private var pairingSymKey: SymmetricKey?
+    private var pairingSymmetricKey: SymmetricKey?
     private var pairingTopic: String?
 
     // MARK: - Session Proposal
 
     private var proposerKeyPair: Curve25519.KeyAgreement.PrivateKey?
+    private var sessionProposalId: Int64?
 
     // MARK: - Session
 
-    private var sessionSymKey: SymmetricKey?
+    private var sessionSymmetricKey: SymmetricKey?
     private(set) var sessionTopic: String?
     private(set) var connectedAddress: String?
     private(set) var isSessionEstablished = false
@@ -47,7 +60,7 @@ actor WCClient {
 
     // MARK: - Init
 
-    init(projectId: String, metadata: WCAppMetadata) {
+    init(projectId: String, metadata: WalletConnectAppMetadata) {
         self.projectId = projectId
         self.metadata = metadata
 
@@ -65,56 +78,61 @@ actor WCClient {
 
     // MARK: - Connect (full flow: pairing → session)
 
-    /// Create a pairing, connect to relay, propose session, wait for approval.
-    /// Returns the wallet URI for deep-linking. Call `waitForSession()` after opening the deep link.
+    /// Create a pairing: generate the pairing symmetric key + topic, and return the URI
+    /// the wallet will scan (or be deep-linked with). No network I/O.
+    /// Call `prepareSession()` next to publish the session proposal to the relay.
     func createPairingURI() throws -> String {
         // Generate pairing symmetric key and topic
-        let symKeyBytes = SymmetricKey(size: .bits256)
-        let symKeyHex = Self.hexEncode(symKeyBytes)
-        let topic = Self.topicFromKey(symKeyBytes)
+        let symmetricKeyBytes = SymmetricKey(size: .bits256)
+        let symmetricKeyHex = Self.hexEncode(symmetricKeyBytes)
+        let topic = Self.topicFromKey(symmetricKeyBytes)
 
-        pairingSymKey = symKeyBytes
+        pairingSymmetricKey = symmetricKeyBytes
         pairingTopic = topic
-
-        // Generate X25519 key pair for session proposal
-        proposerKeyPair = Curve25519.KeyAgreement.PrivateKey()
 
         // Build URI
         let expiry = Int(Date().timeIntervalSince1970) + 300
-        let uri = "wc:\(topic)@2?symKey=\(symKeyHex)&relay-protocol=irn&methods=[wc_sessionPropose]&expiryTimestamp=\(expiry)"
+        let uri = "wc:\(topic)@2?symKey=\(symmetricKeyHex)&relay-protocol=irn&expiryTimestamp=\(expiry)"
+        wcLog("createPairingURI: topic=\(topic.prefix(8))… expiry=\(expiry)")
         return uri
     }
 
-    /// Connect to the relay, subscribe, propose session, and wait for the wallet to approve.
-    /// Returns the connected wallet address.
-    func connectAndWaitForSession() async throws -> String {
-        guard let pairingTopic, let pairingSymKey, let proposerKeyPair else {
-            throw WCError.notPaired
+    /// Connect to the relay, subscribe to the pairing topic, and publish the session proposal.
+    /// Call this immediately after `createPairingURI()` and BEFORE showing the URI/QR to the user,
+    /// so the wallet has a message waiting when it scans the QR or opens the deep link.
+    func prepareSession() async throws {
+        guard let pairingTopic, let pairingSymmetricKey else {
+            throw WalletConnectError.notPaired
         }
 
-        // Connect WebSocket to relay
-        try await connectRelay()
+        // Generate the X25519 key pair now — its public half goes into the proposal we're
+        // about to publish, and its private half is used later in `handleSessionApproval`
+        // to ECDH with the wallet's responder public key and derive the session sym key.
+        let proposerKeyPair = Curve25519.KeyAgreement.PrivateKey()
+        self.proposerKeyPair = proposerKeyPair
 
-        // Subscribe to pairing topic
+        try await connectRelay()
         try await subscribe(topic: pairingTopic)
 
-        // Send session proposal
         let proposalId = Self.generateId()
+        sessionProposalId = proposalId
         let proposal = Self.buildSessionProposal(
             id: proposalId,
             publicKey: Self.hexEncode(proposerKeyPair.publicKey.rawRepresentation),
             metadata: metadata
         )
         let proposalJSON = try JSONSerialization.data(withJSONObject: proposal)
-        let encrypted = try Self.encrypt(data: proposalJSON, key: pairingSymKey)
+        let encrypted = try Self.encrypt(data: proposalJSON, key: pairingSymmetricKey)
         try await publish(topic: pairingTopic, message: encrypted, tag: 1100, ttl: 300)
+        wcLog("prepareSession: published proposal id=\(proposalId) on pairing topic=\(pairingTopic.prefix(8))…")
+    }
 
-        // Wait for session to be established (approval + settle)
-        let address = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+    /// Wait for the wallet to approve the pending session proposal.
+    /// Assumes `prepareSession()` has already been called.
+    func awaitSession() async throws -> String {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
             self.sessionContinuation = continuation
         }
-
-        return address
     }
 
     // MARK: - Session Request
@@ -122,8 +140,8 @@ actor WCClient {
     /// Send an eth_signTypedData_v4 request to the connected wallet.
     /// Returns the signature hex string.
     func signTypedData(address: String, typedDataJSON: String, chainId: String = "eip155:1") async throws -> String {
-        guard let sessionTopic, let sessionSymKey else {
-            throw WCError.noSession
+        guard let sessionTopic, let sessionSymmetricKey else {
+            throw WalletConnectError.noSession
         }
 
         let requestId = Self.generateId()
@@ -141,7 +159,7 @@ actor WCClient {
         ]
 
         let requestJSON = try JSONSerialization.data(withJSONObject: request)
-        let encrypted = try Self.encrypt(data: requestJSON, key: sessionSymKey)
+        let encrypted = try Self.encrypt(data: requestJSON, key: sessionSymmetricKey)
         try await publish(topic: sessionTopic, message: encrypted, tag: 1108, ttl: 300)
 
         // Wait for response
@@ -157,18 +175,19 @@ actor WCClient {
         receiveTask = nil
         webSocket?.cancel(with: .normalClosure, reason: nil)
         webSocket = nil
-        sessionSymKey = nil
+        sessionSymmetricKey = nil
         sessionTopic = nil
         connectedAddress = nil
         isSessionEstablished = false
-        pairingSymKey = nil
+        pairingSymmetricKey = nil
         pairingTopic = nil
+        sessionProposalId = nil
 
         // Fail any pending continuations
-        sessionContinuation?.resume(throwing: WCError.disconnected)
+        sessionContinuation?.resume(throwing: WalletConnectError.disconnected)
         sessionContinuation = nil
         for (_, cont) in requestContinuations {
-            cont.resume(throwing: WCError.disconnected)
+            cont.resume(throwing: WalletConnectError.disconnected)
         }
         requestContinuations.removeAll()
     }
@@ -176,16 +195,21 @@ actor WCClient {
     // MARK: - Relay Connection
 
     private func connectRelay() async throws {
-        let jwt = try Self.generateRelayJWT(keyPair: relayKeyPair)
-        let urlString = "wss://relay.walletconnect.com?auth=\(jwt)&projectId=\(projectId)&ua=wc-2/swift-1.0/ios"
-        guard let url = URL(string: urlString) else {
-            throw WCError.invalidURL
-        }
+        do {
+            let jwt = try Self.generateRelayJWT(keyPair: relayKeyPair)
+            let urlString = "wss://relay.walletconnect.com?auth=\(jwt)&projectId=\(projectId)&ua=wc-2/swift-1.0/ios"
+            guard let url = URL(string: urlString) else {
+                throw WalletConnectError.invalidURL
+            }
 
-        let ws = urlSession.webSocketTask(with: url)
-        ws.resume()
-        webSocket = ws
-        startReceiveLoop()
+            let ws = urlSession.webSocketTask(with: url)
+            ws.resume()
+            webSocket = ws
+            startReceiveLoop()
+        } catch {
+            wcLog("connectRelay error: \(error)")
+            throw error
+        }
     }
 
     private func startReceiveLoop() {
@@ -205,6 +229,7 @@ actor WCClient {
                         break
                     }
                 } catch {
+                    wcLog("recv loop exited: \(error)")
                     break
                 }
             }
@@ -215,6 +240,7 @@ actor WCClient {
 
     private func subscribe(topic: String) async throws {
         let id = Self.generateId()
+        wcLog("subscribe: topic=\(topic.prefix(8))… id=\(id)")
         let msg: [String: Any] = [
             "id": id,
             "jsonrpc": "2.0",
@@ -226,6 +252,7 @@ actor WCClient {
 
     private func publish(topic: String, message: String, tag: Int, ttl: Int) async throws {
         let id = Self.generateId()
+        wcLog("publish: topic=\(topic.prefix(8))… tag=\(tag) bytes=\(message.count)")
         let msg: [String: Any] = [
             "id": id,
             "jsonrpc": "2.0",
@@ -243,18 +270,31 @@ actor WCClient {
     private func sendJSON(_ object: [String: Any]) async throws {
         let data = try JSONSerialization.data(withJSONObject: object)
         guard let text = String(data: data, encoding: .utf8) else {
-            throw WCError.encodingFailed
+            throw WalletConnectError.encodingFailed
         }
         try await webSocket?.send(.string(text))
     }
 
     // MARK: - Message Handling
 
+    /// Parse a JSON-RPC id field which may arrive as Int64, Int, or a BigInt-serialized string like "1775...n".
+    private static func parseId(_ value: Any?) -> Int64 {
+        if let n = value as? Int64 { return n }
+        if let n = value as? Int { return Int64(n) }
+        if let s = value as? String {
+            let trimmed = s.hasSuffix("n") ? String(s.dropLast()) : s
+            return Int64(trimmed) ?? 0
+        }
+        if let n = value as? NSNumber { return n.int64Value }
+        return 0
+    }
+
     private func handleWebSocketMessage(_ text: String) {
+        wcLog("recv: \(text.prefix(200))")
         guard let data = text.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
 
-        let id = json["id"] as? Int64 ?? (json["id"] as? Int).map(Int64.init) ?? 0
+        let id = Self.parseId(json["id"])
 
         // Check if it's an irn_subscription delivery (from relay)
         if let method = json["method"] as? String, method == "irn_subscription" {
@@ -277,19 +317,28 @@ actor WCClient {
     private func handleEncryptedMessage(envelope: String, topic: String) {
         // Determine which key to use based on topic
         let key: SymmetricKey?
+        let topicLabel: String
         if topic == pairingTopic {
-            key = pairingSymKey
+            key = pairingSymmetricKey
+            topicLabel = "pairing"
         } else if topic == sessionTopic {
-            key = sessionSymKey
+            key = sessionSymmetricKey
+            topicLabel = "session"
         } else {
+            wcLog("handleEncryptedMessage: unknown topic=\(topic.prefix(8))…")
             return
         }
 
         guard let key,
               let decrypted = try? Self.decrypt(envelope: envelope, key: key),
-              let json = try? JSONSerialization.jsonObject(with: decrypted) as? [String: Any] else { return }
+              let json = try? JSONSerialization.jsonObject(with: decrypted) as? [String: Any] else {
+            wcLog("decrypt/parse failed on \(topicLabel) topic=\(topic.prefix(8))…")
+            return
+        }
 
-        let id = json["id"] as? Int64 ?? (json["id"] as? Int).map(Int64.init) ?? 0
+        wcLog("decrypted on \(topicLabel): \(String(data: decrypted, encoding: .utf8)?.prefix(200) ?? "?")")
+
+        let id = Self.parseId(json["id"])
 
         if let method = json["method"] as? String {
             // Incoming request from wallet
@@ -301,6 +350,7 @@ actor WCClient {
     }
 
     private func handleIncomingRequest(method: String, id: Int64, json: [String: Any], topic: String) {
+        wcLog("handleIncomingRequest: method=\(method) id=\(id)")
         switch method {
         case "wc_sessionSettle":
             // Extract wallet address from the settle message
@@ -320,15 +370,16 @@ actor WCClient {
 
                 // Send ack
                 Task {
-                    guard let sessionSymKey, let sessionTopic else { return }
+                    guard let sessionSymmetricKey, let sessionTopic else { return }
                     let ack: [String: Any] = ["id": id, "jsonrpc": "2.0", "result": true]
                     let ackData = try JSONSerialization.data(withJSONObject: ack)
-                    let encrypted = try Self.encrypt(data: ackData, key: sessionSymKey)
+                    let encrypted = try Self.encrypt(data: ackData, key: sessionSymmetricKey)
                     try await publish(topic: sessionTopic, message: encrypted, tag: 1103, ttl: 300)
                 }
 
                 // Resume session continuation
                 if let address = connectedAddress {
+                    wcLog("sessionSettle: address=\(address)")
                     sessionContinuation?.resume(returning: address)
                     sessionContinuation = nil
                 }
@@ -343,7 +394,25 @@ actor WCClient {
         // Check for session proposal approval
         if let result = json["result"] as? [String: Any],
            let responderPubKeyHex = result["responderPublicKey"] as? String {
+            wcLog("session approved: id=\(id)")
+            sessionProposalId = nil
             handleSessionApproval(responderPublicKeyHex: responderPubKeyHex)
+            return
+        }
+
+        // Check for session proposal rejection (matches the proposal id we stored in prepareSession)
+        if let proposalId = sessionProposalId, id == proposalId, json["error"] != nil {
+            let message: String
+            if let error = json["error"] as? [String: Any],
+               let msg = error["message"] as? String, !msg.isEmpty {
+                message = msg
+            } else {
+                message = "Wallet rejected the session proposal (no reason given). Check required namespaces or wallet chain support."
+            }
+            wcLog("session proposal \(id) rejected: \(message)")
+            sessionContinuation?.resume(throwing: WalletConnectError.walletRejected(message))
+            sessionContinuation = nil
+            sessionProposalId = nil
             return
         }
 
@@ -353,9 +422,11 @@ actor WCClient {
                 continuation.resume(returning: result)
             } else if let error = json["error"] as? [String: Any],
                       let message = error["message"] as? String {
-                continuation.resume(throwing: WCError.walletRejected(message))
+                wcLog("sign request \(id) rejected: \(message)")
+                continuation.resume(throwing: WalletConnectError.walletRejected(message))
             } else {
-                continuation.resume(throwing: WCError.unexpectedResponse)
+                wcLog("sign request \(id) unexpected response")
+                continuation.resume(throwing: WalletConnectError.unexpectedResponse)
             }
         }
     }
@@ -369,15 +440,17 @@ actor WCClient {
             let responderPubKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: responderPubKeyBytes)
             let derived = try Self.deriveSymKey(privateKey: proposerKeyPair, publicKey: responderPubKey)
 
-            sessionSymKey = derived
+            sessionSymmetricKey = derived
             let sTopic = Self.topicFromKey(derived)
             sessionTopic = sTopic
+            wcLog("handleSessionApproval: responder=\(responderPublicKeyHex.prefix(8))… sessionTopic=\(sTopic.prefix(8))…")
 
             // Subscribe to session topic
             Task {
                 try await subscribe(topic: sTopic)
             }
         } catch {
+            wcLog("handleSessionApproval error: \(error)")
             sessionContinuation?.resume(throwing: error)
             sessionContinuation = nil
         }
@@ -401,16 +474,16 @@ actor WCClient {
     /// Decrypt a Type 0 envelope: base64 → 0x00 || nonce[12] || sealed
     static func decrypt(envelope: String, key: SymmetricKey) throws -> Data {
         guard let bytes = Data(base64Encoded: envelope), bytes.count > 13 else {
-            throw WCError.decryptionFailed
+            throw WalletConnectError.decryptionFailed
         }
 
         let type = bytes[0]
-        guard type == 0x00 else { throw WCError.decryptionFailed }
+        guard type == 0x00 else { throw WalletConnectError.decryptionFailed }
 
         let nonce = try ChaChaPoly.Nonce(data: bytes[1..<13])
         let ciphertextAndTag = bytes[13...]
 
-        guard ciphertextAndTag.count >= 16 else { throw WCError.decryptionFailed }
+        guard ciphertextAndTag.count >= 16 else { throw WalletConnectError.decryptionFailed }
         let tagStart = ciphertextAndTag.endIndex - 16
         let ciphertext = ciphertextAndTag[ciphertextAndTag.startIndex..<tagStart]
         let tag = ciphertextAndTag[tagStart...]
@@ -476,8 +549,15 @@ actor WCClient {
 
     // MARK: - Session Proposal Builder
 
-    static func buildSessionProposal(id: Int64, publicKey: String, metadata: WCAppMetadata) -> [String: Any] {
-        [
+    static func buildSessionProposal(id: Int64, publicKey: String, metadata: WalletConnectAppMetadata) -> [String: Any] {
+        // Required: mainnet only (every EVM wallet has this).
+        // Optional: Arbitrum mainnet (Hyperliquid mainnet signs here).
+        // Keeping the required set minimal maximizes wallet compatibility; we negotiate
+        // the actual signing chain at sign time via the typed-data payload's chainId.
+        let eip155Methods = ["personal_sign", "eth_signTypedData_v4"]
+        let eip155Events = ["chainChanged", "accountsChanged"]
+
+        return [
             "id": id,
             "jsonrpc": "2.0",
             "method": "wc_sessionPropose",
@@ -495,8 +575,15 @@ actor WCClient {
                 "requiredNamespaces": [
                     "eip155": [
                         "chains": ["eip155:1"],
-                        "methods": ["personal_sign", "eth_signTypedData_v4"],
-                        "events": ["chainChanged", "accountsChanged"]
+                        "methods": eip155Methods,
+                        "events": eip155Events
+                    ]
+                ],
+                "optionalNamespaces": [
+                    "eip155": [
+                        "chains": ["eip155:1", "eip155:42161"],
+                        "methods": eip155Methods,
+                        "events": eip155Events
                     ]
                 ]
             ] as [String: Any]
@@ -506,10 +593,13 @@ actor WCClient {
     // MARK: - ID Generation
 
     /// 13-digit epoch millis + 6-digit random
+    /// JSON-RPC id matching WalletConnect JS SDK's `payloadId()`: `ms * 1000 + rand(0..999)`.
+    /// The result (~1.7e15) stays within JS `Number.MAX_SAFE_INTEGER` (2^53 ≈ 9e15), so
+    /// wallets like Rainbow don't BigInt-serialize it and drop the proposal on the floor.
     static func generateId() -> Int64 {
         let ms = Int64(Date().timeIntervalSince1970 * 1000)
-        let rand = Int64.random(in: 100000...999999)
-        return ms * 1000000 + rand
+        let rand = Int64.random(in: 0...999)
+        return ms * 1000 + rand
     }
 
     // MARK: - Base64url
@@ -581,14 +671,14 @@ actor WCClient {
 
 // MARK: - Supporting Types
 
-struct WCAppMetadata {
+struct WalletConnectAppMetadata {
     let name: String
     let description: String
     let url: String
     let icons: [String]
 }
 
-enum WCError: LocalizedError {
+enum WalletConnectError: LocalizedError {
     case notPaired
     case noSession
     case invalidURL
@@ -619,6 +709,10 @@ enum WalletApp: String, CaseIterable, Identifiable {
     case rainbow
     case metamask
     case coinbase
+    case trustwallet
+    case uniswap
+    case zerion
+    case okx
 
     var id: String { rawValue }
 
@@ -627,6 +721,10 @@ enum WalletApp: String, CaseIterable, Identifiable {
         case .rainbow: return "Rainbow"
         case .metamask: return "MetaMask"
         case .coinbase: return "Coinbase Wallet"
+        case .trustwallet: return "Trust Wallet"
+        case .uniswap: return "Uniswap Wallet"
+        case .zerion: return "Zerion"
+        case .okx: return "OKX Wallet"
         }
     }
 
@@ -635,6 +733,10 @@ enum WalletApp: String, CaseIterable, Identifiable {
         case .rainbow: return "rainbow://"
         case .metamask: return "metamask://"
         case .coinbase: return "cbwallet://"
+        case .trustwallet: return "trust://"
+        case .uniswap: return "uniswap://"
+        case .zerion: return "zerion://"
+        case .okx: return "okx://"
         }
     }
 
@@ -644,6 +746,10 @@ enum WalletApp: String, CaseIterable, Identifiable {
         case .rainbow: return URL(string: "rainbow://wc?uri=\(encoded)")
         case .metamask: return URL(string: "metamask://wc?uri=\(encoded)")
         case .coinbase: return URL(string: "cbwallet://wc?uri=\(encoded)")
+        case .trustwallet: return URL(string: "trust://wc?uri=\(encoded)")
+        case .uniswap: return URL(string: "uniswap://wc?uri=\(encoded)")
+        case .zerion: return URL(string: "zerion://wc?uri=\(encoded)")
+        case .okx: return URL(string: "okx://wc?uri=\(encoded)")
         }
     }
 
@@ -652,6 +758,10 @@ enum WalletApp: String, CaseIterable, Identifiable {
         case .rainbow: return "rainbow"
         case .metamask: return "m.circle.fill"
         case .coinbase: return "c.circle.fill"
+        case .trustwallet: return "t.circle.fill"
+        case .uniswap: return "u.circle.fill"
+        case .zerion: return "z.circle.fill"
+        case .okx: return "o.circle.fill"
         }
     }
 

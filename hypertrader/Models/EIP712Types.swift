@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - EIP-712 Typed Data (for JSON serialization to WalletConnect + local hashing)
 
-struct EIP712TypedData: Codable {
+nonisolated struct EIP712TypedData: Codable, Sendable {
     let types: [String: [EIP712Field]]
     let primaryType: String
     let domain: [String: AnyJSON]
@@ -16,7 +16,7 @@ struct EIP712TypedData: Codable {
     }
 }
 
-struct EIP712Field: Codable, Equatable {
+nonisolated struct EIP712Field: Codable, Equatable, Sendable {
     let name: String
     let type: String
 }

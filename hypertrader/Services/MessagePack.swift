@@ -21,7 +21,7 @@ nonisolated enum MessagePackError: Error {
 
 // MARK: - Encoder Implementation
 
-private class MessagePackEncoderImpl: Encoder {
+private nonisolated final class MessagePackEncoderImpl: Encoder {
     var codingPath: [CodingKey] = []
     var userInfo: [CodingUserInfoKey: Any] = [:]
     var data: Data?
@@ -42,7 +42,7 @@ private class MessagePackEncoderImpl: Encoder {
 
 // MARK: - Keyed Container (maps/structs)
 
-private class MessagePackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
+private nonisolated final class MessagePackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol {
     var codingPath: [CodingKey]
     let encoder: MessagePackEncoderImpl
     var entries: [(String, Data)] = []
@@ -127,7 +127,7 @@ private class MessagePackKeyedContainer<Key: CodingKey>: KeyedEncodingContainerP
 
 // MARK: - Unkeyed Container (arrays)
 
-private class MessagePackUnkeyedContainer: UnkeyedEncodingContainer {
+private nonisolated final class MessagePackUnkeyedContainer: UnkeyedEncodingContainer {
     var codingPath: [CodingKey]
     var count = 0
     let encoder: MessagePackEncoderImpl
@@ -180,7 +180,7 @@ private class MessagePackUnkeyedContainer: UnkeyedEncodingContainer {
 
 // MARK: - Single Value Container
 
-private class MessagePackSingleValueContainer: SingleValueEncodingContainer {
+private nonisolated final class MessagePackSingleValueContainer: SingleValueEncodingContainer {
     var codingPath: [CodingKey]
     let encoder: MessagePackEncoderImpl
 
@@ -214,7 +214,7 @@ private class MessagePackSingleValueContainer: SingleValueEncodingContainer {
 
 // MARK: - Primitive Encoding
 
-private enum MessagePack {
+private nonisolated enum MessagePack {
 
     static func encodeString(_ str: String) -> Data {
         let bytes = Array(str.utf8)

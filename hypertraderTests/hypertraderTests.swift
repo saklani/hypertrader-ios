@@ -191,23 +191,23 @@ struct EthereumSignerTests {
     }
 }
 
-// MARK: - WCClient Crypto Tests
+// MARK: - WalletConnectClient Crypto Tests
 
-struct WCClientCryptoTests {
+struct WalletConnectClientCryptoTests {
 
     @Test func encryptDecryptRoundtrip() throws {
         let key = SymmetricKey(size: .bits256)
         let plaintext = Data("hello walletconnect".utf8)
 
-        let envelope = try WCClient.encrypt(data: plaintext, key: key)
-        let decrypted = try WCClient.decrypt(envelope: envelope, key: key)
+        let envelope = try WalletConnectClient.encrypt(data: plaintext, key: key)
+        let decrypted = try WalletConnectClient.decrypt(envelope: envelope, key: key)
 
         #expect(decrypted == plaintext)
     }
 
     @Test func envelopeIsType0() throws {
         let key = SymmetricKey(size: .bits256)
-        let envelope = try WCClient.encrypt(data: Data("test".utf8), key: key)
+        let envelope = try WalletConnectClient.encrypt(data: Data("test".utf8), key: key)
 
         let bytes = Data(base64Encoded: envelope)!
         #expect(bytes[0] == 0x00) // Type 0 envelope
@@ -217,23 +217,23 @@ struct WCClientCryptoTests {
         let key1 = SymmetricKey(size: .bits256)
         let key2 = SymmetricKey(size: .bits256)
 
-        let envelope = try WCClient.encrypt(data: Data("secret".utf8), key: key1)
+        let envelope = try WalletConnectClient.encrypt(data: Data("secret".utf8), key: key1)
         #expect(throws: (any Error).self) {
-            _ = try WCClient.decrypt(envelope: envelope, key: key2)
+            _ = try WalletConnectClient.decrypt(envelope: envelope, key: key2)
         }
     }
 
     @Test func topicFromKeyIsConsistent() {
         let key = SymmetricKey(size: .bits256)
-        let topic1 = WCClient.topicFromKey(key)
-        let topic2 = WCClient.topicFromKey(key)
+        let topic1 = WalletConnectClient.topicFromKey(key)
+        let topic2 = WalletConnectClient.topicFromKey(key)
         #expect(topic1 == topic2)
         #expect(topic1.count == 64) // SHA256 = 32 bytes = 64 hex chars
     }
 
     @Test func topicFromKeyMatchesSHA256() {
         let key = SymmetricKey(size: .bits256)
-        let topic = WCClient.topicFromKey(key)
+        let topic = WalletConnectClient.topicFromKey(key)
 
         // Verify against CryptoKit SHA256 directly
         let expected = key.withUnsafeBytes { bytes in
@@ -245,27 +245,27 @@ struct WCClientCryptoTests {
     @Test func base64urlHasNoForbiddenChars() {
         // Data with bytes that produce +, /, = in standard base64
         let data = Data([0xfb, 0xff, 0xfe, 0x3e, 0x3f])
-        let encoded = WCClient.base64url(data)
+        let encoded = WalletConnectClient.base64url(data)
         #expect(!encoded.contains("+"))
         #expect(!encoded.contains("/"))
         #expect(!encoded.contains("="))
     }
 
     @Test func base58EmptyInput() {
-        let result = WCClient.base58Encode([])
+        let result = WalletConnectClient.base58Encode([])
         #expect(result == "")
     }
 
     @Test func base58LeadingZeros() {
         // [0x00, 0x00, 0x01] → "112" (two leading '1's for zero bytes + '2' for value 1)
-        let result = WCClient.base58Encode([0x00, 0x00, 0x01])
+        let result = WalletConnectClient.base58Encode([0x00, 0x00, 0x01])
         #expect(result == "112")
     }
 
     @Test func base58KnownVector() {
         // "Hello World!" in base58
         let input = Array("Hello World!".utf8)
-        let result = WCClient.base58Encode(input)
+        let result = WalletConnectClient.base58Encode(input)
         #expect(result == "2NEpo7TZRRrLZSi2U")
     }
 
@@ -273,27 +273,29 @@ struct WCClientCryptoTests {
         let keyA = Curve25519.KeyAgreement.PrivateKey()
         let keyB = Curve25519.KeyAgreement.PrivateKey()
 
-        let symAB = try WCClient.deriveSymKey(privateKey: keyA, publicKey: keyB.publicKey)
-        let symBA = try WCClient.deriveSymKey(privateKey: keyB, publicKey: keyA.publicKey)
+        let symAB = try WalletConnectClient.deriveSymKey(privateKey: keyA, publicKey: keyB.publicKey)
+        let symBA = try WalletConnectClient.deriveSymKey(privateKey: keyB, publicKey: keyA.publicKey)
 
         // Same shared secret → same derived key → same topic
-        let topicAB = WCClient.topicFromKey(symAB)
-        let topicBA = WCClient.topicFromKey(symBA)
+        let topicAB = WalletConnectClient.topicFromKey(symAB)
+        let topicBA = WalletConnectClient.topicFromKey(symBA)
         #expect(topicAB == topicBA)
     }
 
     @Test func relayJWTFormat() throws {
         let keyPair = Curve25519.Signing.PrivateKey()
-        let jwt = try WCClient.generateRelayJWT(keyPair: keyPair)
+        let jwt = try WalletConnectClient.generateRelayJWT(keyPair: keyPair)
 
         let parts = jwt.split(separator: ".")
         #expect(parts.count == 3) // header.payload.signature
     }
 
-    @Test func generateIdIs19Digits() {
-        let id = WCClient.generateId()
-        let digits = String(id).count
-        #expect(digits == 19)
+    @Test func generateIdFitsInJSSafeInteger() {
+        // WalletConnect JS SDK uses `payloadId() = ms * 1000 + rand(0..999)`, which keeps
+        // ids within Number.MAX_SAFE_INTEGER (2^53 ≈ 9e15). JS wallets BigInt-serialize
+        // anything above that and silently reject the proposal — we hit this with Rainbow.
+        let id = WalletConnectClient.generateId()
+        #expect(id < (1 << 53))
     }
 }
 

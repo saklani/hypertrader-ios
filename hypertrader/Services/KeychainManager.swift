@@ -2,7 +2,7 @@ import Foundation
 import Security
 
 /// Stores and retrieves the agent wallet private key in the iOS Keychain.
-enum KeychainManager {
+nonisolated enum KeychainManager {
     private static let service = "com.hypertrader.agent-wallet"
     private static let account = "agent-private-key"
 
@@ -62,7 +62,7 @@ enum KeychainManager {
     }
 }
 
-enum KeychainError: LocalizedError {
+nonisolated enum KeychainError: LocalizedError {
     case saveFailed(OSStatus)
     case deleteFailed(OSStatus)
 

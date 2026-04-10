@@ -2,11 +2,11 @@ import Foundation
 
 // MARK: - Asset Metadata
 
-struct HLAssetMeta: Codable {
+nonisolated struct HLAssetMeta: Codable, Sendable {
     let universe: [HLAsset]
 }
 
-struct HLAsset: Codable, Identifiable, Hashable {
+nonisolated struct HLAsset: Codable, Identifiable, Hashable, Sendable {
     let name: String
     let szDecimals: Int
     let maxLeverage: Int
@@ -20,7 +20,7 @@ struct HLAsset: Codable, Identifiable, Hashable {
 
 // MARK: - Clearinghouse State (Positions + Margin)
 
-struct HLClearinghouseState: Codable {
+nonisolated struct HLClearinghouseState: Codable, Sendable {
     let marginSummary: HLMarginSummary
     let crossMarginSummary: HLMarginSummary
     let crossMaintenanceMarginUsed: String?
@@ -28,20 +28,20 @@ struct HLClearinghouseState: Codable {
     let assetPositions: [HLAssetPosition]
 }
 
-struct HLMarginSummary: Codable {
+nonisolated struct HLMarginSummary: Codable, Sendable {
     let accountValue: String
     let totalNtlPos: String
     let totalRawUsd: String
     let totalMarginUsed: String
 }
 
-struct HLAssetPosition: Codable, Identifiable {
+nonisolated struct HLAssetPosition: Codable, Identifiable, Sendable {
     let type: String
     let position: HLPosition
     var id: String { position.coin }
 }
 
-struct HLPosition: Codable {
+nonisolated struct HLPosition: Codable, Sendable {
     let coin: String
     let szi: String
     let entryPx: String?
@@ -59,13 +59,13 @@ struct HLPosition: Codable {
     var pnl: Double { Double(unrealizedPnl) ?? 0 }
 }
 
-struct HLLeverage: Codable {
+nonisolated struct HLLeverage: Codable, Sendable {
     let type: String
     let value: Int
     let rawUsd: String?
 }
 
-struct HLCumFunding: Codable {
+nonisolated struct HLCumFunding: Codable, Sendable {
     let allTime: String
     let sinceChange: String
     let sinceOpen: String
@@ -73,7 +73,7 @@ struct HLCumFunding: Codable {
 
 // MARK: - Asset Context (volume, mark price, etc.)
 
-struct HLAssetCtx: Codable {
+nonisolated struct HLAssetCtx: Codable, Sendable {
     let dayNtlVlm: String
     let markPx: String
     let midPx: String?
@@ -86,7 +86,7 @@ struct HLAssetCtx: Codable {
 }
 
 /// Response from `metaAndAssetCtxs` — a heterogeneous JSON array: [HLAssetMeta, [HLAssetCtx]]
-struct HLMetaAndAssetCtxs: Decodable {
+nonisolated struct HLMetaAndAssetCtxs: Decodable, Sendable {
     let meta: HLAssetMeta
     let assetCtxs: [HLAssetCtx]
 
@@ -100,7 +100,7 @@ struct HLMetaAndAssetCtxs: Decodable {
 // MARK: - Spot Models
 
 /// Response from `spotMetaAndAssetCtxs` — heterogeneous JSON array: [HLSpotMeta, [HLSpotAssetCtx]]
-struct HLSpotMetaAndAssetCtxs: Decodable {
+nonisolated struct HLSpotMetaAndAssetCtxs: Decodable, Sendable {
     let meta: HLSpotMeta
     let assetCtxs: [HLSpotAssetCtx]
 
@@ -111,12 +111,12 @@ struct HLSpotMetaAndAssetCtxs: Decodable {
     }
 }
 
-struct HLSpotMeta: Codable {
+nonisolated struct HLSpotMeta: Codable, Sendable {
     let tokens: [HLSpotToken]
     let universe: [HLSpotPair]
 }
 
-struct HLSpotToken: Codable {
+nonisolated struct HLSpotToken: Codable, Sendable {
     let name: String
     let index: Int
     let szDecimals: Int?
@@ -126,14 +126,14 @@ struct HLSpotToken: Codable {
     let fullName: String?
 }
 
-struct HLSpotPair: Codable {
+nonisolated struct HLSpotPair: Codable, Sendable {
     let name: String
     let tokens: [Int]
     let index: Int
     let isCanonical: Bool
 }
 
-struct HLSpotAssetCtx: Codable {
+nonisolated struct HLSpotAssetCtx: Codable, Sendable {
     let dayNtlVlm: String
     let markPx: String
     let midPx: String?
@@ -143,7 +143,7 @@ struct HLSpotAssetCtx: Codable {
 // MARK: - Perp Dex (from perpDexs endpoint)
 
 /// A builder dex from the `perpDexs` endpoint. Element 0 is null (native dex).
-struct HLPerpDex: Codable {
+nonisolated struct HLPerpDex: Codable, Sendable {
     let name: String
     let fullName: String?
     let deployer: String?
@@ -176,7 +176,7 @@ nonisolated struct HLCandle: Codable, Identifiable, Sendable {
 
 // MARK: - Trade Fills (history)
 
-struct HLFill: Codable, Identifiable {
+nonisolated struct HLFill: Codable, Identifiable, Sendable {
     let coin: String
     let side: String        // "B" (buy) or "A" (sell/ask)
     let px: String
@@ -287,37 +287,37 @@ nonisolated struct HLCancelWire: Codable, Sendable {
 
 // MARK: - Exchange Request/Response
 
-struct HLSignature: Codable {
+nonisolated struct HLSignature: Codable, Sendable {
     let r: String
     let s: String
     let v: Int
 }
 
-struct HLExchangeResponse: Codable {
+nonisolated struct HLExchangeResponse: Codable, Sendable {
     let status: String
     let response: HLExchangeResponseData?
 }
 
-struct HLExchangeResponseData: Codable {
+nonisolated struct HLExchangeResponseData: Codable, Sendable {
     let type: String
     let data: HLExchangeResponseStatuses?
 }
 
-struct HLExchangeResponseStatuses: Codable {
+nonisolated struct HLExchangeResponseStatuses: Codable, Sendable {
     let statuses: [HLOrderStatus]
 }
 
-struct HLOrderStatus: Codable {
+nonisolated struct HLOrderStatus: Codable, Sendable {
     let resting: HLRestingOrder?
     let filled: HLFilledOrder?
     let error: String?
 }
 
-struct HLRestingOrder: Codable {
+nonisolated struct HLRestingOrder: Codable, Sendable {
     let oid: Int
 }
 
-struct HLFilledOrder: Codable {
+nonisolated struct HLFilledOrder: Codable, Sendable {
     let totalSz: String
     let avgPx: String
     let oid: Int
@@ -325,7 +325,7 @@ struct HLFilledOrder: Codable {
 
 // MARK: - Open Orders
 
-struct HLOpenOrder: Codable, Identifiable {
+nonisolated struct HLOpenOrder: Codable, Identifiable, Sendable {
     let coin: String
     let side: String
     let limitPx: String

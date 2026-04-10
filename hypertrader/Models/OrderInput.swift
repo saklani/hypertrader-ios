@@ -1,6 +1,6 @@
 import Foundation
 
-struct OrderInput {
+nonisolated struct OrderInput: Sendable {
     let asset: HLAsset
     let assetIndex: Int
     let isBuy: Bool

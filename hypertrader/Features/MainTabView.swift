@@ -13,11 +13,6 @@ struct MainTabView: View {
                     Label("Positions", systemImage: "list.bullet.rectangle")
                 }
 
-            PortfolioView()
-                .tabItem {
-                    Label("Portfolio", systemImage: "briefcase")
-                }
-
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")

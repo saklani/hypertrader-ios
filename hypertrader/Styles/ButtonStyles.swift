@@ -42,6 +42,21 @@ struct WalletRowButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Wallet Grid Card
+
+/// Vertical card-style button for the wallet picker grid.
+/// Usage: `Button { } label: { VStack { Image(...); Text(...) } }.buttonStyle(WalletGridCardStyle())`
+struct WalletGridCardStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+            .background(.quaternary)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+    }
+}
+
 // MARK: - Destructive Button
 
 /// Bordered destructive-style button for dangerous actions.

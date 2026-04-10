@@ -1,48 +1,16 @@
 import SwiftUI
 
-/// Tappable header (BTC/USDC ▼ + price) that opens a searchable picker sheet.
-struct MarketPicker: View {
-    let assetName: String
-    let price: String
+/// Modal searchable list of assets. Owns its own search text as local `@State`
+/// so a fresh search starts each time the sheet opens.
+struct MarketPickerSheet: View {
     let assets: [AssetWithVolume]
     let midPrices: [String: String]
-    @Binding var searchText: String
     let onSelect: (HLAsset) -> Void
 
-    @State private var showPicker = false
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
 
     var body: some View {
-        HStack {
-            Button {
-                showPicker = true
-            } label: {
-                HStack(spacing: 4) {
-                    Text(assetName)
-                        .font(.title2.bold())
-                    Image(systemName: "chevron.down")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .buttonStyle(MarketPickerButtonStyle())
-
-            Spacer()
-
-            Text(price)
-                .font(.title3.monospaced())
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal)
-        .padding(.top, 12)
-        .padding(.bottom, 4)
-        .sheet(isPresented: $showPicker) {
-            pickerSheet
-        }
-    }
-
-    // MARK: - Picker Sheet
-
-    private var pickerSheet: some View {
         NavigationStack {
             List(filteredAssets) { item in
                 MarketRowView(
@@ -55,7 +23,7 @@ struct MarketPicker: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     onSelect(item.asset)
-                    showPicker = false
+                    dismiss()
                 }
             }
             .listStyle(.plain)
@@ -64,7 +32,7 @@ struct MarketPicker: View {
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search coins...")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { showPicker = false }
+                    Button("Done") { dismiss() }
                 }
             }
         }
@@ -85,34 +53,14 @@ struct MarketPicker: View {
     }
 }
 
-/// Shows a subtle highlight when pressed.
-private struct MarketPickerButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.vertical, 6)
-            .padding(.horizontal, 10)
-            .background(configuration.isPressed ? Color.accentColor.opacity(0.1) : Color(.systemGray6))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(.systemGray4), lineWidth: 0.5)
-            )
-    }
-}
-
-// MARK: - Previews
-
 #Preview {
-    MarketPicker(
-        assetName: "BTC",
-        price: "$95,123.50",
+    MarketPickerSheet(
         assets: [
             AssetWithVolume(asset: HLAsset(name: "BTC", szDecimals: 5, maxLeverage: 50, onlyIsolated: nil, isDelisted: nil), dayNtlVlm: 1_250_000_000, prevDayPx: 93000),
             AssetWithVolume(asset: HLAsset(name: "ETH", szDecimals: 4, maxLeverage: 50, onlyIsolated: nil, isDelisted: nil), dayNtlVlm: 890_000_000, prevDayPx: 3150),
             AssetWithVolume(asset: HLAsset(name: "SOL", szDecimals: 2, maxLeverage: 20, onlyIsolated: nil, isDelisted: nil), dayNtlVlm: 320_000_000, prevDayPx: 135),
         ],
         midPrices: ["BTC": "95123.50", "ETH": "3200.10", "SOL": "142.30"],
-        searchText: .constant(""),
         onSelect: { _ in }
     )
 }

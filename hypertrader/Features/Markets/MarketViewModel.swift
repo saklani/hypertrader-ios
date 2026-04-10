@@ -14,7 +14,6 @@ final class MarketViewModel {
 
     // Market data
     var assetsWithVolume: [AssetWithVolume] = []
-    var searchText = ""
     var isLoadingMarketData = false
     var error: String?
 
@@ -39,7 +38,8 @@ final class MarketViewModel {
     }
 
     var isWalletReady: Bool {
-        WalletConnectManager.shared.isConnected && KeychainManager.hasAgentKey
+        let mgr = WalletConnectManager.shared
+        return mgr.isConnected && mgr.isAgentReady
     }
 
     var walletAddress: String? {

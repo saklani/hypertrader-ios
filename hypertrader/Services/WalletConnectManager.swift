@@ -1,7 +1,7 @@
 import Foundation
 import UIKit
 
-/// High-level wallet connection manager. Uses WCClient for the protocol,
+/// High-level wallet connection manager. Uses WalletConnectClient for the protocol,
 /// exposes Observable state for SwiftUI views.
 @Observable
 @MainActor
@@ -15,43 +15,57 @@ final class WalletConnectManager {
     private(set) var isLoading = false
     private(set) var error: String?
 
-    private var wcClient: WCClient?
+    /// Whether an agent key exists and has been approved for trading.
+    /// Canonical observable source of truth — reads `KeychainManager.hasAgentKey`
+    /// at init and is updated by `AuthViewModel.setupAgentWallet()` on approval.
+    /// Views depending on "is the user fully set up to trade" should read this
+    /// via `MarketViewModel.isWalletReady` (or directly) instead of calling
+    /// `KeychainManager.hasAgentKey`, which is non-observable.
+    var isAgentReady = false
+
+    private var wcClient: WalletConnectClient?
 
     // MARK: - Initialization
 
     func initialize() {
         let projectId = "61711db68ae8ac06d236a9a2534dbfee"
 
-        wcClient = WCClient(
+        wcClient = WalletConnectClient(
             projectId: projectId,
-            metadata: WCAppMetadata(
+            metadata: WalletConnectAppMetadata(
                 name: "Hypertrader",
                 description: "Trade on Hyperliquid",
                 url: "https://hypertrader.app",
                 icons: ["https://hypertrader.app/icon.png"]
             )
         )
+
+        // Seed agent-ready state from Keychain so the app launches in the right
+        // state when the user already has an approved agent from a prior session.
+        isAgentReady = KeychainManager.hasAgentKey
     }
 
     // MARK: - Connect Wallet
 
-    /// Connect to a wallet app. Creates pairing, opens the wallet, waits for session.
+    /// Connect to a wallet app. Creates pairing, publishes the session proposal, opens the
+    /// wallet deep link, and waits for the wallet to approve.
     func connect(wallet: WalletApp = .rainbow) async throws -> String {
-        guard let wcClient else { throw WCError.notPaired }
+        guard let wcClient else { throw WalletConnectError.notPaired }
         isLoading = true
         error = nil
 
         do {
-            // Create pairing URI
             let uri = try await wcClient.createPairingURI()
 
-            // Deep link to wallet app
+            // Publish the session proposal BEFORE opening the wallet so there's a
+            // message waiting on the pairing topic when the wallet connects.
+            try await wcClient.prepareSession()
+
             if let deepLink = wallet.deepLink(uri: uri) {
                 await UIApplication.shared.open(deepLink)
             }
 
-            // Wait for session establishment
-            let address = try await wcClient.connectAndWaitForSession()
+            let address = try await wcClient.awaitSession()
 
             walletAddress = address
             isConnected = true
@@ -64,24 +78,32 @@ final class WalletConnectManager {
         }
     }
 
-    // MARK: - Manual URI Flow (no wallet app installed)
+    // MARK: - Manual URI / QR Flow (no wallet app installed, or cross-device)
 
-    /// Generate a WC URI without opening any wallet app.
-    /// The user copies it and pastes into their wallet manually.
+    /// Generate a WC URI and publish the session proposal to the relay so the wallet has
+    /// a message waiting the moment it scans the QR (or pastes the URI).
     func generateURI() async throws -> String {
-        guard let wcClient else { throw WCError.notPaired }
+        guard let wcClient else { throw WalletConnectError.notPaired }
         isLoading = true
         error = nil
-        let uri = try await wcClient.createPairingURI()
-        return uri
+        do {
+            let uri = try await wcClient.createPairingURI()
+            try await wcClient.prepareSession()
+            return uri
+        } catch {
+            self.error = error.localizedDescription
+            isLoading = false
+            throw error
+        }
     }
 
-    /// Wait for the wallet to connect after the user pastes the URI.
+    /// Wait for the wallet to approve the pending session proposal.
+    /// Assumes `generateURI()` (or `connect()`) has already called `prepareSession`.
     func waitForSession() async throws -> String {
-        guard let wcClient else { throw WCError.notPaired }
+        guard let wcClient else { throw WalletConnectError.notPaired }
 
         do {
-            let address = try await wcClient.connectAndWaitForSession()
+            let address = try await wcClient.awaitSession()
             walletAddress = address
             isConnected = true
             isLoading = false
@@ -99,7 +121,7 @@ final class WalletConnectManager {
     /// Opens the wallet app for approval.
     func signTypedData(_ typedData: EIP712TypedData, wallet: WalletApp = .rainbow) async throws -> String {
         guard let wcClient, let address = walletAddress else {
-            throw WCError.noSession
+            throw WalletConnectError.noSession
         }
 
         guard let jsonString = typedData.toJSONString() else {
