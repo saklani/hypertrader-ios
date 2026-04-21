@@ -2,7 +2,22 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        MainTabView()
+        TabView {
+            MarketView()
+                .tabItem {
+                    Label("Markets", systemImage: "chart.xyaxis.line")
+                }
+
+            PositionsView()
+                .tabItem {
+                    Label("Positions", systemImage: "list.bullet")
+                }
+
+            SettingsView()
+                .tabItem {
+                    Label("Settings", systemImage: "gearshape")
+                }
+        }
     }
 }
 

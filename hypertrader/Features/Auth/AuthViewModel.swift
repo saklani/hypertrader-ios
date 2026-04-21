@@ -1,23 +1,18 @@
 import Foundation
 
-/// Drives the wallet connection → agent setup → approval flow.
+/// Drives the wallet connection flow: picking a wallet, connecting via
+/// WalletConnect, and the manual QR/URI fallback. Agent approval is handled
+/// separately by `AgentViewModel`.
 @Observable
 @MainActor
 final class AuthViewModel {
     let wcManager = WalletConnectManager.shared
 
     var selectedWallet: WalletApp = .rainbow
-    private(set) var agentAddress: String?
-    private(set) var isAgentApproved = false
-    private(set) var isSettingUpAgent = false
     private(set) var setupError: String?
     private(set) var pendingURI: String?
 
-    var isFullyReady: Bool {
-        wcManager.isConnected && isAgentApproved
-    }
-
-    // MARK: - Step 1: Connect Wallet
+    // MARK: - Connect Wallet
 
     func connectWallet() async {
         do {
@@ -25,58 +20,6 @@ final class AuthViewModel {
         } catch {
             setupError = error.localizedDescription
         }
-    }
-
-    // MARK: - Step 2: Setup Agent Wallet + Approve
-
-    func setupAgentWallet() async {
-        isSettingUpAgent = true
-        setupError = nil
-
-        do {
-            // Generate or load agent key
-            let agentKey: Data
-            if let existing = KeychainManager.loadAgentKey() {
-                agentKey = existing
-            } else {
-                agentKey = EthereumSigner.generatePrivateKey()
-                try KeychainManager.saveAgentKey(agentKey)
-            }
-
-            let agentAddr = EthereumSigner.deriveAddress(from: agentKey)
-            agentAddress = agentAddr
-
-            // Build approveAgent typed data
-            let nonce = HyperliquidSigner.generateNonce()
-            let typedData = EIP712Builder.approveAgent(
-                agentAddress: agentAddr,
-                nonce: nonce
-            )
-
-            // Send to wallet for signing via WalletConnect
-            let signatureHex = try await wcManager.signTypedData(typedData, wallet: selectedWallet)
-
-            guard let signature = HyperliquidSigner.parse(signature: signatureHex) else {
-                throw HLError.signingFailed("Invalid signature from wallet")
-            }
-
-            // Post approveAgent to Hyperliquid
-            try await HyperliquidExchangeService.shared.approveAgent(
-                agentAddress: agentAddr,
-                nonce: nonce,
-                signature: signature
-            )
-
-            isAgentApproved = true
-            // Publish the change to the observable singleton so every view
-            // reading `WalletConnectManager.shared.isAgentReady` re-renders,
-            // regardless of which AuthViewModel instance owned this flow.
-            wcManager.isAgentReady = true
-        } catch {
-            setupError = error.localizedDescription
-        }
-
-        isSettingUpAgent = false
     }
 
     // MARK: - Copy URI Flow (no wallet app installed)
@@ -106,14 +49,10 @@ final class AuthViewModel {
 
     func disconnect() async {
         await wcManager.disconnect()
-        isAgentApproved = false
-        agentAddress = nil
     }
 
     var shortAddress: String {
-        guard let addr = wcManager.walletAddress, addr.count > 10 else {
-            return "Not connected"
-        }
-        return "\(addr.prefix(6))...\(addr.suffix(4))"
+        guard let addr = wcManager.walletAddress else { return "Not connected" }
+        return formatShortAddress(addr)
     }
 }

@@ -28,18 +28,13 @@ final class MarketViewModel {
     var midPrices: [String: String] { wsService.mids }
 
     var currentMidPrice: String {
-        guard let asset = selectedAsset else { return "--" }
-        return midPrices[asset.name] ?? "--"
+        guard let asset = selectedAsset, let raw = midPrices[asset.name] else { return "--" }
+        return formatDisplayPrice(raw)
     }
 
     var currentMidPriceDouble: Double? {
         guard let asset = selectedAsset, let str = midPrices[asset.name] else { return nil }
         return Double(str)
-    }
-
-    var isWalletReady: Bool {
-        let mgr = WalletConnectManager.shared
-        return mgr.isConnected && mgr.isAgentReady
     }
 
     var walletAddress: String? {

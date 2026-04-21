@@ -3,9 +3,15 @@ import SwiftUI
 struct PositionsView: View {
     @State private var vm = PositionsViewModel()
 
+    /// Read the shared observable so the wallet header re-renders when the user
+    /// connects or disconnects (from the Markets `TradeSheet` or from this view).
+    private var wcManager: WalletConnectManager { WalletConnectManager.shared }
+
     var body: some View {
         NavigationStack {
             List {
+                walletSection
+
                 // Account summary
                 Section("Account") {
                     MetricRow(label: "Account Value", value: vm.accountValue)
@@ -54,6 +60,31 @@ struct PositionsView: View {
             }
         }
     }
+
+    // MARK: - Wallet Section
+
+    @ViewBuilder
+    private var walletSection: some View {
+        Section("Wallet") {
+            if wcManager.isConnected, let address = wcManager.walletAddress {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(formatShortAddress(address))
+                        .font(.body.monospaced())
+                    Spacer()
+                }
+
+                Button("Disconnect Wallet", role: .destructive) {
+                    Task { await wcManager.disconnect() }
+                }
+            } else {
+                Text("No wallet connected")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
 }
 
 #Preview {

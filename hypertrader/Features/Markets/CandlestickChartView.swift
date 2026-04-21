@@ -94,13 +94,13 @@ struct CandlestickChartView: View {
                     .font(.caption2.monospaced())
             }
         }
-        .containerRelativeFrame(.vertical) { height, _ in height * 0.5 }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {
         Rectangle()
             .fill(Color(.systemGray6))
-            .containerRelativeFrame(.vertical) { height, _ in height * 0.5 }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 ProgressView("Loading chart...")
                     .font(.caption)

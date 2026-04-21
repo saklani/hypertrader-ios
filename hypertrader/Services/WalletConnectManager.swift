@@ -12,15 +12,16 @@ final class WalletConnectManager {
 
     private(set) var isConnected = false
     private(set) var walletAddress: String?
+    private(set) var connectedWallet: WalletApp?
     private(set) var isLoading = false
     private(set) var error: String?
 
     /// Whether an agent key exists and has been approved for trading.
     /// Canonical observable source of truth — reads `KeychainManager.hasAgentKey`
     /// at init and is updated by `AuthViewModel.setupAgentWallet()` on approval.
-    /// Views depending on "is the user fully set up to trade" should read this
-    /// via `MarketViewModel.isWalletReady` (or directly) instead of calling
-    /// `KeychainManager.hasAgentKey`, which is non-observable.
+    /// Views depending on "is the user fully set up to trade" should read
+    /// `isConnected && isAgentReady` off this singleton rather than calling
+    /// `KeychainManager.hasAgentKey` directly, which is non-observable.
     var isAgentReady = false
 
     private var wcClient: WalletConnectClient?
@@ -68,6 +69,7 @@ final class WalletConnectManager {
             let address = try await wcClient.awaitSession()
 
             walletAddress = address
+            connectedWallet = wallet
             isConnected = true
             isLoading = false
             return address
@@ -119,7 +121,8 @@ final class WalletConnectManager {
 
     /// Request the connected wallet to sign EIP-712 typed data.
     /// Opens the wallet app for approval.
-    func signTypedData(_ typedData: EIP712TypedData, wallet: WalletApp = .rainbow) async throws -> String {
+    func signTypedData(_ typedData: EIP712TypedData, wallet: WalletApp? = nil) async throws -> String {
+        let wallet = wallet ?? connectedWallet ?? .rainbow
         guard let wcClient, let address = walletAddress else {
             throw WalletConnectError.noSession
         }
@@ -144,6 +147,20 @@ final class WalletConnectManager {
     func disconnect() async {
         await wcClient?.disconnect()
         walletAddress = nil
+        connectedWallet = nil
         isConnected = false
     }
 }
+
+#if DEBUG
+extension WalletConnectManager {
+    /// SwiftUI preview helper. Forces the manager into a given wallet state without
+    /// going through the real connect + approval flow. Same-file extension so it can
+    /// reach the `private(set)` properties. Do not call from production code.
+    func setPreviewState(connected: Bool, agentReady: Bool, address: String?) {
+        self.isConnected = connected
+        self.isAgentReady = agentReady
+        self.walletAddress = address
+    }
+}
+#endif

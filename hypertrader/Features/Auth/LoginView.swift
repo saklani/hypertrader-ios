@@ -1,9 +1,16 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 
+/// Embeddable wallet picker + agent approval flow.
+/// Designed to be dropped inline into any container (in particular `TradeSheet`'s
+/// disconnected branch). No NavigationStack, no toolbar, no dismiss — the host
+/// decides when to stop rendering this view. When the wallet is connected + agent
+/// is approved, the host should stop mounting `LoginView` entirely.
+///
+/// The QR code flow is an in-place state swap via `@State showingQR`, not a
+/// `navigationDestination` — so nothing here depends on being inside a NavigationStack.
 struct LoginView: View {
     @Bindable var authVM: AuthViewModel
-    @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var showingQR = false
     @State private var copiedURI = false
@@ -15,54 +22,34 @@ struct LoginView: View {
     ]
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    if authVM.wcManager.isConnected {
-                        connectedView
-                    } else {
-                        walletPicker
-                    }
-
-                    if let error = authVM.wcManager.error ?? authVM.setupError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                }
-                .padding()
-            }
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                    }
-                }
-            }
-            .onChange(of: authVM.isFullyReady) { _, ready in
-                if ready { dismiss() }
-            }
-            .navigationDestination(isPresented: $showingQR) {
-                qrCodeView
-            }
+        if showingQR {
+            qrCodeView
+        } else {
+            mainContent
         }
     }
 
-    // MARK: - Header
+    // MARK: - Main content (wallet picker or agent approval)
 
-    private var header: some View {
-        VStack(spacing: 8) {
-            Text("Hypertrader")
-                .font(.largeTitle.bold())
-            Text("Trade on Hyperliquid")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+    private var mainContent: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                if authVM.wcManager.isConnected {
+                    connectedView
+                } else {
+                    walletPicker
+                }
+
+                if let error = authVM.wcManager.error ?? authVM.setupError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                }
+            }
+            .padding()
         }
-        .padding(.top, 8)
     }
 
     // MARK: - Wallet Picker
@@ -167,9 +154,24 @@ struct LoginView: View {
 
     private var qrCodeView: some View {
         VStack(spacing: 20) {
+            // In-place back button (replaces the NavigationStack back chevron)
+            HStack {
+                Button {
+                    showingQR = false
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back")
+                    }
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
+
             Text("Scan with your wallet")
                 .font(.title3.bold())
-                .padding(.top, 8)
 
             Text("Open your wallet app and scan\nthis code to connect.")
                 .font(.subheadline)
@@ -210,8 +212,6 @@ struct LoginView: View {
             Spacer()
         }
         .padding()
-        .navigationTitle("Connect")
-        .navigationBarTitleDisplayMode(.inline)
         .task {
             await authVM.waitForSession()
         }
@@ -250,35 +250,24 @@ struct LoginView: View {
         return UIImage(cgImage: cgImage)
     }
 
-    // MARK: - Connected View
+    // MARK: - Connected View (agent approval step)
 
     private var connectedView: some View {
         VStack(spacing: 16) {
-            HStack {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                Text(authVM.shortAddress)
-                    .font(.headline.monospaced())
-            }
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.green)
 
-            if authVM.isAgentApproved {
-                Text("Trading enabled")
-                    .foregroundStyle(.green)
-            } else {
-                Button {
-                    Task { await authVM.setupAgentWallet() }
-                } label: {
-                    Text("Approve Trading")
-                }
-                .buttonStyle(PrimaryButtonStyle(color: .orange, isLoading: authVM.isSettingUpAgent))
-                .disabled(authVM.isSettingUpAgent)
-                .padding(.horizontal)
+            Text("Wallet Connected")
+                .font(.title3.bold())
 
-                Text("This opens your wallet to approve an agent key.\nAfter this, trades sign automatically.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            Text(authVM.shortAddress)
+                .font(.body.monospaced())
+                .foregroundStyle(.secondary)
+
+            Text("You can close this sheet now.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }
