@@ -22,7 +22,6 @@ struct TradeHistoryView: View {
             if history.fills.isEmpty {
                 Text("No trades yet")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
                     .padding(.horizontal)
                     .padding(.vertical, 12)
             } else {

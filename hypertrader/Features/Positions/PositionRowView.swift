@@ -20,7 +20,6 @@ struct PositionRowView: View {
 
                 Text("\(pos.leverage.value)x")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             // Details grid
@@ -29,7 +28,7 @@ struct PositionRowView: View {
                 Spacer()
                 DetailColumn(label: "Entry", value: pos.entryPx ?? "--", alignment: .center)
                 Spacer()
-                DetailColumn(label: "uPnL", value: pnlFormatted, alignment: .trailing, valueColor: pos.pnl >= 0 ? .green : .red)
+                DetailColumn(label: "uPnL", value: pnlFormatted, alignment: .trailing)
             }
 
             // Close button

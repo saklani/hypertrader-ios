@@ -15,13 +15,8 @@ struct ApproveAgentButton: View {
             showSheet = true
         } label: {
             Label("Enable Trading", systemImage: "signature")
-                .font(.subheadline.bold())
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(.orange, in: Capsule())
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
         }
+        .buttonStyle(FABStyle())
         .sheet(isPresented: $showSheet) {
             NavigationStack {
                 agentApprovalContent
@@ -46,7 +41,6 @@ struct ApproveAgentButton: View {
 
             Image(systemName: "key.fill")
                 .font(.system(size: 40))
-                .foregroundStyle(.orange)
 
             Text("Enable Trading")
                 .font(.title2.bold())
@@ -54,7 +48,6 @@ struct ApproveAgentButton: View {
             if let address = wcManager.walletAddress {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
                     Text(formatShortAddress(address))
                         .font(.body.monospaced())
                 }
@@ -62,7 +55,6 @@ struct ApproveAgentButton: View {
 
             Text("A local signing key has been created on your device. Approving it lets you place trades instantly without wallet pop-ups.\n\nYour wallet will ask you to sign a one-time message — no funds are transferred.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -71,14 +63,13 @@ struct ApproveAgentButton: View {
             } label: {
                 Text("Sign to Approve")
             }
-            .buttonStyle(PrimaryButtonStyle(color: .orange, isLoading: agent.isLoading))
+            .buttonStyle(PrimaryButtonStyle(isLoading: agent.isLoading))
             .disabled(agent.isLoading)
             .padding(.horizontal)
 
             if let error = agent.error {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }

@@ -22,7 +22,6 @@ struct PositionsView: View {
                 Section("Open Positions") {
                     if vm.positions.isEmpty && !vm.isLoading {
                         Text("No open positions")
-                            .foregroundStyle(.secondary)
                     }
 
                     ForEach(vm.positions) { assetPosition in
@@ -69,7 +68,6 @@ struct PositionsView: View {
             if wcManager.isConnected, let address = wcManager.walletAddress {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
                     Text(formatShortAddress(address))
                         .font(.body.monospaced())
                     Spacer()
@@ -80,7 +78,6 @@ struct PositionsView: View {
                 }
             } else {
                 Text("No wallet connected")
-                    .foregroundStyle(.secondary)
             }
         }
     }

@@ -34,7 +34,6 @@ struct OrderFormView: View {
                     Text("Limit").tag(false)
                 }
                 .pickerStyle(.menu)
-                .tint(.primary)
 
                 Spacer()
 
@@ -43,7 +42,6 @@ struct OrderFormView: View {
                     Text("Cross").tag(false)
                 }
                 .pickerStyle(.menu)
-                .tint(.primary)
             }
             .padding(.horizontal)
             .padding(.top, 12)
@@ -66,7 +64,6 @@ struct OrderFormView: View {
             VStack(spacing: 6) {
                 LabeledNumericField(label: "Size", text: $order.sizeText)
                 Slider(value: $order.sizeValue, in: 0...maxSize)
-                    .tint(order.isBuy ? .green : .red)
             }
             .padding(.horizontal)
 
@@ -74,7 +71,6 @@ struct OrderFormView: View {
             VStack(spacing: 6) {
                 LabeledNumericField(label: "Leverage", text: $order.leverageText)
                 Slider(value: $order.leverage, in: 1...maxLeverage, step: 1)
-                    .tint(order.isBuy ? .green : .red)
             }
             .padding(.horizontal)
 
@@ -89,7 +85,6 @@ struct OrderFormView: View {
                 Text("Place Order")
             }
             .buttonStyle(PrimaryButtonStyle(
-                color: order.isBuy ? .green : .red,
                 isLoading: order.isPlacingOrder
             ))
             .disabled(!canPlaceOrder || order.isPlacingOrder)

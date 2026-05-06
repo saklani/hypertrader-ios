@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 
-/// Embeddable wallet picker + agent approval flow.
+/// Embeddable wallet picker
 /// Designed to be dropped inline into any container (in particular `TradeSheet`'s
 /// disconnected branch). No NavigationStack, no toolbar, no dismiss — the host
 /// decides when to stop rendering this view. When the wallet is connected + agent
@@ -9,7 +9,11 @@ import CoreImage.CIFilterBuiltins
 ///
 /// The QR code flow is an in-place state swap via `@State showingQR`, not a
 /// `navigationDestination` — so nothing here depends on being inside a NavigationStack.
-struct LoginView: View {
+///
+///
+
+
+struct WalletView: View {
     @Bindable var authVM: AuthViewModel
     @State private var searchText = ""
     @State private var showingQR = false
@@ -43,8 +47,7 @@ struct LoginView: View {
                 if let error = authVM.wcManager.error ?? authVM.setupError {
                     Text(error)
                         .font(.caption)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                                                .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
             }
@@ -67,8 +70,7 @@ struct LoginView: View {
             if filteredWallets.isEmpty {
                 Text("No wallets match \"\(searchText)\"")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
+                                        .padding(.top, 8)
             }
 
             if authVM.wcManager.isLoading {
@@ -89,8 +91,7 @@ struct LoginView: View {
                     Text("Connect with QR code")
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
-            }
+                            }
             .disabled(authVM.wcManager.isLoading)
             .padding(.top, 4)
         }
@@ -99,8 +100,7 @@ struct LoginView: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Search wallets…", text: $searchText)
+                            TextField("Search wallets…", text: $searchText)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
             if !searchText.isEmpty {
@@ -108,14 +108,12 @@ struct LoginView: View {
                     searchText = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
+                                        }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(.quaternary)
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
@@ -125,18 +123,27 @@ struct LoginView: View {
             Task { await authVM.connectWallet() }
         } label: {
             VStack(spacing: 8) {
-                Image(systemName: wallet.iconName)
-                    .font(.system(size: 32))
+                Image(wallet.iconName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 40, height: 40)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
                 Text(wallet.displayName)
-                    .font(.subheadline)
+                    .font(.caption)
+                    .fontWeight(.semibold)
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+            .aspectRatio(contentMode: .fill)
+            .roundedCornerWithBorder(
+                corners: [.allCorners],
+                borderColor: .secondary,
+                radius: 4
+            )
         }
-        .buttonStyle(WalletGridCardStyle())
         .disabled(authVM.wcManager.isLoading)
     }
 
@@ -175,21 +182,18 @@ struct LoginView: View {
 
             Text("Open your wallet app and scan\nthis code to connect.")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                                .multilineTextAlignment(.center)
 
             if let error = authVM.wcManager.error ?? authVM.setupError {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
-                    .multilineTextAlignment(.center)
+                                        .multilineTextAlignment(.center)
                     .padding(.horizontal)
             }
 
             if let uri = authVM.pendingURI {
                 qrCodeImage(for: uri)
                     .padding(16)
-                    .background(Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 
                 Button {
@@ -203,7 +207,6 @@ struct LoginView: View {
                     .font(.caption)
                 }
                 .buttonStyle(.bordered)
-                .tint(copiedURI ? .green : .blue)
             } else {
                 ProgressView("Generating QR code…")
                     .padding(40)
@@ -234,8 +237,7 @@ struct LoginView: View {
         } else {
             Text("Failed to generate QR code")
                 .font(.caption)
-                .foregroundStyle(.red)
-        }
+                        }
     }
 
     private func generateQRCode(from string: String) -> UIImage? {
@@ -254,24 +256,34 @@ struct LoginView: View {
 
     private var connectedView: some View {
         VStack(spacing: 16) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(.green)
-
-            Text("Wallet Connected")
-                .font(.title3.bold())
-
             Text(authVM.shortAddress)
                 .font(.body.monospaced())
-                .foregroundStyle(.secondary)
-
-            Text("You can close this sheet now.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }
 
-#Preview {
-    LoginView(authVM: AuthViewModel())
+
+// MARK: - Wallet Grid Card
+
+/// Vertical card-style button for the wallet picker grid.
+/// Usage: `Button { } label: { VStack { Image(...); Text(...) } }.buttonStyle(WalletGridCardStyle())`
+struct WalletGridCardStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+    }
+}
+
+#Preview("Not Connected") {
+    WalletView(authVM: AuthViewModel())
+}
+
+#Preview("Connected") {
+    WalletView(authVM: AuthViewModel())
+        .onAppear {
+            WalletConnectManager.shared.setPreviewState(
+                connected: true,
+                agentReady: false,
+                address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+            )
+        }
 }

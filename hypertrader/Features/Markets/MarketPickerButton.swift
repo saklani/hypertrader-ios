@@ -13,7 +13,6 @@ struct MarketPickerButton: View {
                     .font(.title2.bold())
                 Image(systemName: "chevron.down")
                     .font(.caption.bold())
-                    .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(MarketPickerButtonStyle())
@@ -26,12 +25,7 @@ private struct MarketPickerButtonStyle: ButtonStyle {
         configuration.label
             .padding(.vertical, 6)
             .padding(.horizontal, 12)
-            .background(configuration.isPressed ? Color.accentColor.opacity(0.1) : Color(.systemGray6).opacity(0.2))
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(.systemGray4), lineWidth: 0.5)
-            )
     }
 }
 

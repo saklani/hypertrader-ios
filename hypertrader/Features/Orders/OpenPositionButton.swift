@@ -17,13 +17,8 @@ struct OpenPositionButton: View {
             showSheet = true
         } label: {
             Label("Open Position", systemImage: "plus")
-                .font(.subheadline.bold())
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(.green, in: Capsule())
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
         }
+        .buttonStyle(FABStyle())
         .sheet(isPresented: $showSheet) {
             NavigationStack {
                 ScrollView {

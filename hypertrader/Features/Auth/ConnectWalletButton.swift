@@ -14,21 +14,13 @@ struct ConnectWalletButton: View {
             showSheet = true
         } label: {
             Label("Connect Wallet", systemImage: "link")
-                .font(.subheadline.bold())
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(.blue, in: Capsule())
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
         }
+        .buttonStyle(FABStyle())
         .sheet(isPresented: $showSheet) {
             NavigationStack {
                 VStack(spacing: 0) {
                     Text("Connect a Wallet")
-                        .font(.title2.bold())
-                        .padding(.top, 8)
-                        .padding(.bottom, 4)
-                    LoginView(authVM: authVM)
+                    WalletView(authVM: authVM)
                 }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -40,6 +32,8 @@ struct ConnectWalletButton: View {
             .onChange(of: wcManager.isConnected) { _, connected in
                 if connected { showSheet = false }
             }
+            
+            
         }
     }
 }

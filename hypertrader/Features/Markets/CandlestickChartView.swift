@@ -47,7 +47,6 @@ struct CandlestickChartView: View {
                     yEnd: .value("High", candle.high)
                 )
                 .lineStyle(StrokeStyle(lineWidth: 1))
-                .foregroundStyle(candle.isBullish ? Color.green : Color.red)
 
                 // Body
                 RectangleMark(
@@ -56,21 +55,17 @@ struct CandlestickChartView: View {
                     yEnd: .value("Close", candle.close),
                     width: .fixed(bodyWidth)
                 )
-                .foregroundStyle(candle.isBullish ? Color.green : Color.red)
             }
 
             // Current price line
             if let price = currentPrice {
                 RuleMark(y: .value("Price", price))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    .foregroundStyle(Color.accentColor.opacity(0.7))
                     .annotation(position: .trailing, alignment: .leading, spacing: 4) {
                         Text(formatDisplayPrice(price))
                             .font(.caption2.bold().monospaced())
-                            .foregroundStyle(.white)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 2)
-                            .background(Color.accentColor)
                             .clipShape(RoundedRectangle(cornerRadius: 3))
                     }
             }
@@ -99,7 +94,6 @@ struct CandlestickChartView: View {
 
     private var emptyState: some View {
         Rectangle()
-            .fill(Color(.systemGray6))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
                 ProgressView("Loading chart...")

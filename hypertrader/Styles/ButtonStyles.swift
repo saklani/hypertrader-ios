@@ -42,20 +42,6 @@ struct WalletRowButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Wallet Grid Card
-
-/// Vertical card-style button for the wallet picker grid.
-/// Usage: `Button { } label: { VStack { Image(...); Text(...) } }.buttonStyle(WalletGridCardStyle())`
-struct WalletGridCardStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background(.quaternary)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .opacity(configuration.isPressed ? 0.7 : 1.0)
-    }
-}
 
 // MARK: - Destructive Button
 
@@ -80,6 +66,25 @@ struct DestructiveActionButtonStyle: ButtonStyle {
         .background(Color.red.opacity(configuration.isPressed ? 0.15 : 0.1))
         .foregroundStyle(.red)
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// MARK: - Floating Action Button
+
+/// Capsule-shaped FAB with shadow. Pass a `color` to override the default blue.
+/// Usage: `Button { } label: { Label("Trade", systemImage: "plus") }.buttonStyle(FABStyle(color: .green))`
+struct FABStyle: ButtonStyle {
+    var color: Color = .blue
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.bold())
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(color, in: Capsule())
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
     }
 }
 

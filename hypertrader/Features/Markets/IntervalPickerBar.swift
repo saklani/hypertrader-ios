@@ -17,13 +17,10 @@ struct IntervalPickerBar: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding(.vertical, 8)
                         .contentShape(Rectangle())
-                        .background(selected == interval ? Color.accentColor.opacity(0.15) : Color.clear)
-                        .foregroundStyle(selected == interval ? Color.accentColor : .secondary)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.horizontal)
         .padding(.vertical, 4)

@@ -9,7 +9,6 @@ struct LivePriceLabel: View {
     var body: some View {
         Text(price)
             .font(.title3.monospaced())
-            .foregroundStyle(.secondary)
     }
 }
 

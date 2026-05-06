@@ -25,7 +25,6 @@ struct MarketRowView: View {
 
             Text(formattedVolume)
                 .font(.caption.monospaced())
-                .foregroundStyle(.secondary)
                 .frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 4)

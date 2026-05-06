@@ -12,7 +12,6 @@ struct TradeHistoryRow: View {
 
             Text("@")
                 .font(.caption2)
-                .foregroundStyle(.secondary)
 
             Text(fill.px)
                 .font(.caption.monospaced())
@@ -21,7 +20,6 @@ struct TradeHistoryRow: View {
 
             Text(fill.date, format: .dateTime.hour().minute())
                 .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
     }

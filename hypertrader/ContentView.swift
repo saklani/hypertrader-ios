@@ -7,12 +7,10 @@ struct ContentView: View {
                 .tabItem {
                     Label("Markets", systemImage: "chart.xyaxis.line")
                 }
-
             PositionsView()
                 .tabItem {
                     Label("Positions", systemImage: "list.bullet")
                 }
-
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gearshape")
